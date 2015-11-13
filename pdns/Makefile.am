@@ -209,10 +209,10 @@ pdns_server_LDFLAGS = \
 	$(BOOST_SERIALIZATION_LDFLAGS)
 
 pdns_server_LDADD = \
+	$(MBEDTLS_LIBS) \
 	@moduleobjects@ \
 	@modulelibs@ \
 	$(LIBDL) \
-	$(MBEDTLS_LIBS) \
 	$(BOOST_SERIALIZATION_LIBS) \
 	$(YAHTTP_LIBS)
 
@@ -309,10 +309,10 @@ pdnssec_LDFLAGS = \
 	$(BOOST_SERIALIZATION_LDFLAGS)
 
 pdnssec_LDADD = \
+	$(MBEDTLS_LIBS) \
 	@moduleobjects@ \
 	@modulelibs@ \
 	$(LIBDL) \
-	$(MBEDTLS_LIBS) \
 	$(BOOST_PROGRAM_OPTIONS_LIBS) \
 	$(BOOST_SERIALIZATION_LIBS) \
 	$(YAHTTP_LIBS)
