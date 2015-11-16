@@ -40,6 +40,10 @@
 #include <pwd.h>
 #include <getopt.h>
 
+#if HAVE_SECCOMP
+#include <seccomp.h>
+#endif /* HAVE_SECCOMP */
+
 /* Known sins:
 
    Receiver is currently singlethreaded
@@ -138,6 +142,58 @@ struct DelayedPacket
 };
 
 DelayPipe<DelayedPacket> * g_delay = 0;
+
+#if HAVE_SECCOMP
+static const struct {
+  const uint32_t action;
+  const int syscall;
+} seccomp_rules[] = {
+  { SCMP_ACT_ALLOW, SCMP_SYS(socket) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(connect) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(accept) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(setsockopt) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(sendto) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(recvfrom) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(recv) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(recvmsg) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(send) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(poll) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(read) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(close) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(write) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(clone) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(pipe) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(futex) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(exit) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(exit_group) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(futex) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(brk) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(mmap) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(mprotect) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(munmap) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(fcntl) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(set_robust_list) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(nanosleep) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(rt_sigprocmask) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(rt_sigaction) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(stat) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(fstat) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(access) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(lseek) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(ioctl) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(clock_gettime) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(ptrace) },
+  /* needed for getOpenFileDescriptors */
+  { SCMP_ACT_ALLOW, SCMP_SYS(getdents) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(getdents64) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(open) }, /* fixme ! */
+  /* needed to be able to start the web server at runtime */
+  { SCMP_ACT_ALLOW, SCMP_SYS(bind) },
+  { SCMP_ACT_ALLOW, SCMP_SYS(listen) },
+};
+static const size_t seccomp_rules_count = sizeof seccomp_rules / sizeof *seccomp_rules;
+
+#endif /* HAVE_SECCOMP */
 
 // listens on a dedicated socket, lobs answers from downstream servers to original requestors
 void* responderThread(std::shared_ptr<DownstreamState> state)
@@ -1115,6 +1171,16 @@ try
     g_cmdLine.remotes.push_back(*p);
   }
 
+#if HAVE_SECCOMP
+  //  scmp_filter_ctx ctx = seccomp_init(SCMP_ACT_ERRNO(EPERM));
+  scmp_filter_ctx seccomp_ctx = seccomp_init(SCMP_ACT_KILL);
+
+  if (!seccomp_ctx) {
+    errlog("error setting up the seccomp sandbox");
+    exit(1);
+  }
+#endif /* HAVE_SECCOMP */
+
   g_maxOutstanding = 1024;
 
   ServerPolicy leastOutstandingPol{"leastOutstanding", leastOutstanding};
@@ -1256,6 +1322,33 @@ try
   thread carbonthread(carbonDumpThread);
   carbonthread.detach();
 
+#if HAVE_SECCOMP
+  if (seccomp_ctx) {
+    for (size_t idx = 0;
+         idx < seccomp_rules_count;
+         idx++) {
+      seccomp_rule_add(seccomp_ctx, seccomp_rules[idx].action, seccomp_rules[idx].syscall, 0);
+    }
+
+    int res = seccomp_load(seccomp_ctx);
+    if (res != 0) {
+      errlog("Error applying seccomp rules: %s", strerror(errno));
+      exit(1);
+    }
+  }
+#endif /* HAVE_SECCOMP */
+
+  for(auto& cs : toLaunch) {
+    if (cs->udpFD != -1) {
+      thread t1(udpClientThread, cs);
+      t1.detach();
+    }
+    else {
+      thread t1(tcpAcceptorThread, cs);
+      t1.detach();
+    }
+  }
+
   thread stattid(maintThread);
   
   if(g_cmdLine.beDaemon || g_cmdLine.beSupervised) {
@@ -1265,6 +1358,14 @@ try
     stattid.detach();
     doConsole();
   }
+
+#if HAVE_SECCOMP
+  if (seccomp_ctx) {
+    seccomp_release(seccomp_ctx);
+    seccomp_ctx = NULL;
+  }
+#endif /* HAVE_SECCOMP */
+
   _exit(EXIT_SUCCESS);
 
 }
