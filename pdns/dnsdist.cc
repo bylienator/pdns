@@ -1286,6 +1286,9 @@ try
 #ifdef TCP_DEFER_ACCEPT
     SSetsockopt(cs->tcpFD, SOL_TCP,TCP_DEFER_ACCEPT, 1);
 #endif
+#ifdef TCP_QUICKACK
+    SSetsockopt(cs->tcpFD, IPPROTO_TCP, TCP_QUICKACK, 1);
+#endif
     if(cs->local.sin4.sin_family == AF_INET6) {
       SSetsockopt(cs->tcpFD, IPPROTO_IPV6, IPV6_V6ONLY, 1);
     }

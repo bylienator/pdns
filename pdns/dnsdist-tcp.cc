@@ -25,6 +25,7 @@
 #include "lock.hh"
 #include <thread>
 #include <atomic>
+#include <netinet/tcp.h>
 
 using std::thread;
 using std::atomic;
@@ -49,6 +50,9 @@ static int setupTCPDownstream(const ComboAddress& remote)
   vinfolog("TCP connecting to downstream %s", remote.toStringWithPort());
   int sock = SSocket(remote.sin4.sin_family, SOCK_STREAM, 0);
   SConnect(sock, remote);
+#ifdef TCP_QUICKACK
+  SSetsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, 1);
+#endif
   setNonBlocking(sock);
   return sock;
 }
@@ -144,6 +148,10 @@ void* tcpClientThread(int pipefd)
     shared_ptr<DownstreamState> ds;
     if (!setNonBlocking(ci.fd))
       goto drop;
+
+#ifdef TCP_QUICKACK
+    SSetsockopt(ci.fd, IPPROTO_TCP, TCP_QUICKACK, 1);
+#endif
 
     try {
       for(;;) {      
