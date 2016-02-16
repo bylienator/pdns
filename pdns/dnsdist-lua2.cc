@@ -64,15 +64,15 @@ map<ComboAddress,int> exceedRespGen(int rate, int seconds, std::function<void(co
   cutoff.tv_sec -= seconds;
 
   std::lock_guard<std::mutex> lock(g_rings.respMutex);
-  for(const auto& c : g_rings.respRing) {
-    if(seconds && c.when < cutoff)
-      continue;
-    if(now < c.when)
+  for(decltype(g_rings.respRing)::const_reverse_iterator it = g_rings.respRing.rbegin(); it != g_rings.respRing.rend(); ++it) {
+    if(seconds && it->when < cutoff)
+      break;
+    if(now < it->when)
       continue;
 
-    T(counts, c);
-    if(c.when < mintime)
-      mintime = c.when;
+    T(counts, *it);
+    if(it->when < mintime)
+      mintime = it->when;
   }
   double delta = seconds ? seconds : DiffTime(now, mintime);
   return filterScore(counts, delta, rate);
@@ -87,14 +87,14 @@ map<ComboAddress,int> exceedQueryGen(int rate, int seconds, std::function<void(c
   cutoff.tv_sec -= seconds;
 
   ReadLock rl(&g_rings.queryLock);
-  for(const auto& c : g_rings.queryRing) {
-    if(seconds && c.when < cutoff)
+  for(decltype(g_rings.queryRing)::const_reverse_iterator it = g_rings.queryRing.rbegin(); it != g_rings.queryRing.rend(); ++it) {
+    if(seconds && it->when < cutoff)
       continue;
-    if(now < c.when)
+    if(now < it->when)
       continue;
-    T(counts, c);
-    if(c.when < mintime)
-      mintime = c.when;
+    T(counts, *it);
+    if(it->when < mintime)
+      mintime = it->when;
   }
   double delta = seconds ? seconds : DiffTime(now, mintime);
   return filterScore(counts, delta, rate);
