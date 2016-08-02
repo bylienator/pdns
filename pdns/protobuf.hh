@@ -20,7 +20,9 @@ class DNSProtoBufMessage
 public:
   enum DNSProtoBufMessageType {
     Query,
-    Response
+    Response,
+    OutgoingQuery,
+    IncomingResponse
   };
 
   DNSProtoBufMessage()
@@ -39,6 +41,7 @@ public:
   void setTime(time_t sec, uint32_t usec);
   void setQueryTime(time_t sec, uint32_t usec);
   void setResponseCode(uint8_t rcode);
+  void setType(DNSProtoBufMessageType type);
   void addRRsFromPacket(const char* packet, const size_t len);
   void serialize(std::string& data) const;
   std::string toDebugString() const;

@@ -72,3 +72,12 @@ void RecProtoBufMessage::setPolicyTags(const std::vector<std::string>& policyTag
   }
 #endif /* HAVE_PROTOBUF */
 }
+
+#ifdef HAVE_PROTOBUF
+void RecProtoBufMessage::setInitialRequestId(const boost::uuids::uuid& initialRequestId)
+{
+  std::string* reqId = d_message.mutable_initialrequestid();
+  reqId->resize(initialRequestId.size());
+  std::copy(initialRequestId.begin(), initialRequestId.end(), reqId->begin());
+}
+#endif /* HAVE_PROTOBUF */

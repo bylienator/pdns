@@ -249,17 +249,17 @@ void loadRecursorLuaConfig(const std::string& fname)
   Lua.writeFunction("protobufServer", [&lci](const string& server_, const boost::optional<uint16_t> timeout, const boost::optional<uint64_t> maxQueuedEntries, const boost::optional<uint8_t> reconnectWaitTime, const boost::optional<uint8_t> maskV4, boost::optional<uint8_t> maskV6) {
       try {
 	ComboAddress server(server_);
-        if (!lci.protobufServer) {
-          lci.protobufServer = std::make_shared<RemoteLogger>(server, timeout ? *timeout : 2, maxQueuedEntries ? *maxQueuedEntries : 100, reconnectWaitTime ? *reconnectWaitTime : 1);
+        if (!lci.protobuf.server) {
+          lci.protobuf.server = std::make_shared<RemoteLogger>(server, timeout ? *timeout : 2, maxQueuedEntries ? *maxQueuedEntries : 100, reconnectWaitTime ? *reconnectWaitTime : 1);
           if (maskV4) {
-            lci.protobufMaskV4 = *maskV4;
+            lci.protobuf.maskV4 = *maskV4;
           }
           if (maskV6) {
-            lci.protobufMaskV6 = *maskV6;
+            lci.protobuf.maskV6 = *maskV6;
           }
         }
         else {
-          theL()<<Logger::Error<<"Only one protobuf server can be configured, we already have "<<lci.protobufServer->toString()<<endl;
+          theL()<<Logger::Error<<"Only one protobuf server can be configured, we already have "<<lci.protobuf.server->toString()<<endl;
         }
       }
       catch(std::exception& e) {
@@ -267,6 +267,24 @@ void loadRecursorLuaConfig(const std::string& fname)
       }
       catch(PDNSException& e) {
         theL()<<Logger::Error<<"Error while starting protobuf logger to '"<<server_<<": "<<e.reason<<endl;
+      }
+    });
+
+  Lua.writeFunction("outgoingProtobufServer", [&lci](const string& server_, const boost::optional<uint16_t> timeout, const boost::optional<uint64_t> maxQueuedEntries, const boost::optional<uint8_t> reconnectWaitTime) {
+      try {
+	ComboAddress server(server_);
+        if (!lci.outgoingProtobuf.server) {
+          lci.outgoingProtobuf.server = std::make_shared<RemoteLogger>(server, timeout ? *timeout : 2, maxQueuedEntries ? *maxQueuedEntries : 100, reconnectWaitTime ? *reconnectWaitTime : 1);
+        }
+        else {
+          theL()<<Logger::Error<<"Only one outgoing protobuf server can be configured, we already have "<<lci.protobuf.server->toString()<<endl;
+        }
+      }
+      catch(std::exception& e) {
+	theL()<<Logger::Error<<"Error while starting outgoing protobuf logger to '"<<server_<<": "<<e.what()<<endl;
+      }
+      catch(PDNSException& e) {
+        theL()<<Logger::Error<<"Error while starting outgoing protobuf logger to '"<<server_<<": "<<e.reason<<endl;
       }
     });
 #endif

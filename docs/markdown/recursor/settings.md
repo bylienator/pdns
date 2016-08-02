@@ -524,6 +524,13 @@ The optional parameters are:
 
 The protocol buffers message types can be found in the [`dnsmessage.proto`](https://github.com/PowerDNS/pdns/blob/master/pdns/dnsmessage.proto) file.
 
+Protobuf export of outgoing queries and the corresponding answers is enabled with the `outgoingProtobufServer()`
+directive:
+
+```
+outgoingProtobufServer("192.0.2.1:4242" [[[, timeout], maxQueuedEntries], reconnectWaitTime])
+```
+
 ## `lua-dns-script`
 * Path
 * Default: unset

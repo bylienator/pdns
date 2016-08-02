@@ -7,15 +7,21 @@
 
 class LuaConfigItems 
 {
+  struct ProtobufConfig
+  {
+    std::shared_ptr<RemoteLogger> server{nullptr};
+    uint8_t maskV4{32};
+    uint8_t maskV6{128};
+  };
+
 public:
   LuaConfigItems();
   SortList sortlist;
   DNSFilterEngine dfe;
   map<DNSName,dsmap_t> dsAnchors;
   map<DNSName,std::string> negAnchors;
-  std::shared_ptr<RemoteLogger> protobufServer{nullptr};
-  uint8_t protobufMaskV4{32};
-  uint8_t protobufMaskV6{128};
+  ProtobufConfig protobuf;
+  ProtobufConfig outgoingProtobuf;
 };
 
 extern GlobalStateHolder<LuaConfigItems> g_luaconfs;
