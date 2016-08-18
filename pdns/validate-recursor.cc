@@ -73,11 +73,12 @@ vState validateRecords(const vector<DNSRecord>& recs)
 
   vState state=Insecure;
   bool hadNTA = false;
+  size_t unsupportedCount = 0;
   if(numsigs) {
     bool first = true;
     for(const auto& csp : cspmap) {
       for(const auto& sig : csp.second.signatures) {
-        vState newState = getKeysFor(sro, sig->d_signer, keys); // XXX check validity here
+        vState newState = getKeysFor(sro, sig->d_signer, keys, unsupportedCount); // XXX check validity here
 
         if (newState == Bogus) // No hope
           return increaseDNSSECStateCounter(Bogus);
@@ -99,7 +100,7 @@ vState validateRecords(const vector<DNSRecord>& recs)
 
     bool first = true;
     for(const auto& rec : recs) {
-      vState newState = getKeysFor(sro, rec.d_name, keys);
+      vState newState = getKeysFor(sro, rec.d_name, keys, unsupportedCount);
 
       if (newState == Bogus) // We're done
         return increaseDNSSECStateCounter(Bogus);
@@ -138,7 +139,7 @@ vState validateRecords(const vector<DNSRecord>& recs)
   //  cerr<<"Input to validate: "<<endl;
   for(const auto& csp : cspmap) {
     LOG(csp.first.first<<"|"<<DNSRecordContent::NumberToType(csp.first.second)<<" with "<<csp.second.signatures.size()<<" signatures"<<endl);
-    if(!csp.second.signatures.empty() && !validrrsets.count(csp.first)) {
+    if(!csp.second.signatures.empty() && !validrrsets.count(csp.first) && !unsupportedCount) {
       LOG("Lacks signature, must have one, signatures: "<<csp.second.signatures.size()<<", valid rrsets: "<<validrrsets.count(csp.first)<<endl);
       return increaseDNSSECStateCounter(Bogus);
     }

@@ -34,5 +34,5 @@ typedef map<pair<DNSName,uint16_t>, ContentSigPair> cspmap_t;
 typedef std::set<DSRecordContent> dsmap_t;
 void validateWithKeySet(const cspmap_t& rrsets, cspmap_t& validated, const std::set<DNSKEYRecordContent>& keys);
 cspmap_t harvestCSPFromRecs(const vector<DNSRecord>& recs);
-vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, std::set<DNSKEYRecordContent> &keyset);
+vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, std::set<DNSKEYRecordContent> &keyset, size_t& unsupportedCount);
 

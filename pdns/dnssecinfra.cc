@@ -130,6 +130,12 @@ DNSCryptoKeyEngine* DNSCryptoKeyEngine::make(unsigned int algo)
   }
 }
 
+bool DNSCryptoKeyEngine::isSupported(unsigned int algorithm)
+{
+  makers_t& makers = getMakers();
+  return (makers.find(algorithm) != makers.end());
+}
+
 /**
  * Returns the supported DNSSEC algorithms with the name of the Crypto Backend used
  *

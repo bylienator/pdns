@@ -47,7 +47,8 @@ class DNSCryptoKeyEngine
     static DNSCryptoKeyEngine* makeFromPEMString(DNSKEYRecordContent& drc, const std::string& raw);
     static DNSCryptoKeyEngine* makeFromPublicKeyString(unsigned int algorithm, const std::string& raw);
     static DNSCryptoKeyEngine* make(unsigned int algorithm);
-    
+    static bool isSupported(unsigned int algorithm);
+  
     typedef DNSCryptoKeyEngine* maker_t(unsigned int algorithm);
     
     static void report(unsigned int algorithm, maker_t* maker, bool fallback=false);

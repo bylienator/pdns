@@ -165,7 +165,7 @@ cspmap_t harvestCSPFromRecs(const vector<DNSRecord>& recs)
   return cspmap;
 }
 
-vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, keyset_t &keyset)
+vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, keyset_t &keyset, size_t& unsupportedCount)
 {
   auto luaLocal = g_luaconfs.getLocal();
   auto anchors = luaLocal->dsAnchors;
@@ -306,11 +306,16 @@ vState getKeysFor(DNSRecordOracle& dro, const DNSName& zone, keyset_t &keyset)
 	  //          cerr<<"validating : ";
           bool isValid = false;
 	  try {
-	    unsigned int now = time(0);
-	    if(i->d_siginception < now && i->d_sigexpire > now) {
-	      std::shared_ptr<DNSCryptoKeyEngine> dke = shared_ptr<DNSCryptoKeyEngine>(DNSCryptoKeyEngine::makeFromPublicKeyString(j.d_algorithm, j.d_key));
-	      isValid = dke->verify(msg, i->d_signature);
-	    }
+            if (DNSCryptoKeyEngine::isSupported(j.d_algorithm)) {
+              unsigned int now = time(0);
+              if(i->d_siginception < now && i->d_sigexpire > now) {
+                std::shared_ptr<DNSCryptoKeyEngine> dke = shared_ptr<DNSCryptoKeyEngine>(DNSCryptoKeyEngine::makeFromPublicKeyString(j.d_algorithm, j.d_key));
+                isValid = dke->verify(msg, i->d_signature);
+              }
+            }
+            else {
+              unsupportedCount++;
+            }
 	  }
 	  catch(std::exception& e) {
 	    LOG("Could not make a validator for signature: "<<e.what()<<endl);
