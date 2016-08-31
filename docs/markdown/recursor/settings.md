@@ -518,6 +518,20 @@ code.
 Finally, if a RPZ or custom Lua policy has been applied, response messages
 also contain the applied policy name and some tags. This is particularly useful
 to detect and act on infected hosts.
+However, if a query policy is applied but doesn't stop the processing, for example
+because its action is NoAction, the policy name will be overridden after the `preresolve` hook
+by the result of the "post" policy. In order to be able to export the name of
+the query policy in a protobuf message in that case, a `preresolve` hook can be
+used to save the applied policy name as a policy tag:
+
+```
+function preresolve(dq)
+  if dq.appliedPolicy.policyName then
+    dq:addPolicyTag(dq.appliedPolicy.policyName)
+  end
+  return false
+end
+```
 
 Protobuf export to a server is enabled using the `protobufServer()` directive:
 
