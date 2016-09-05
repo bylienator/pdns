@@ -71,7 +71,7 @@ bool TSIGTCPVerifier::check(const string& data, const MOADNSParser& mdp)
     } else {
       string ourMac=calculateHMAC(d_tt.secret, message, algo);
 
-      if(ourMac != theirMac) {
+      if(!constantTimeStringEquals(ourMac, theirMac)) {
         throw std::runtime_error("Signature failed to validate on AXFR response from "+d_remote.toStringWithPort()+" signed with TSIG key '"+d_tt.name.toString()+"'");
       }
     }

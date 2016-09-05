@@ -20,5 +20,3 @@ private:
   size_t d_tsigPos{0};
   uint8_t d_nonSignedMessages{0}; // RFC2845 4.4
 };
-
-  

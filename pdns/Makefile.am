@@ -736,6 +736,7 @@ tsig_tests_SOURCES = \
 	sstuff.hh \
 	statbag.cc \
 	tsig-tests.cc \
+	tsigverifier.cc tsigverifier.hh \
 	unix_utility.cc
 
 tsig_tests_LDADD = $(LIBCRYPTO_LIBS)
