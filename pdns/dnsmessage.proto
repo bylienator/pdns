@@ -23,6 +23,8 @@ message PBDNSMessage {
   enum Type {
     DNSQueryType = 1;
     DNSResponseType = 2;
+    DNSOutgoingQueryType = 3;
+    DNSIncomingResponseType = 4;
   }
   enum SocketFamily {
     INET = 1;   // IPv4 (RFC 791)
@@ -69,4 +71,5 @@ message PBDNSMessage {
 
   optional DNSResponse response = 13;
   optional bytes originalRequestorSubnet = 14;
+  optional bytes initialRequestId = 15;
 }

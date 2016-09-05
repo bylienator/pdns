@@ -704,6 +704,9 @@ void startDoResolve(void *p)
       // Ignore the client-set CD flag
       pw.getHeader()->cd=0;
     }
+#ifdef HAVE_PROTOBUF
+    sr.d_initialRequestId = dc->d_uuid;
+#endif
 
     bool tracedQuery=false; // we could consider letting Lua know about this too
     bool variableAnswer = false;
@@ -948,7 +951,11 @@ void startDoResolve(void *p)
             L<<Logger::Warning<<"Starting validation of answer to "<<dc->d_mdp.d_qname<<"|"<<QType(dc->d_mdp.d_qtype).getName()<<" for "<<dc->d_remote.toStringWithPort()<<endl;
           }
           
-          auto state=validateRecords(ret);
+          ResolveContext ctx;
+#ifdef HAVE_PROTOBUF
+          ctx.d_initialRequestId = dc->d_uuid;
+#endif
+          auto state=validateRecords(ctx, ret);
           if(state == Secure) {
             if(sr.doLog()) {
               L<<Logger::Warning<<"Answer to "<<dc->d_mdp.d_qname<<"|"<<QType(dc->d_mdp.d_qtype).getName()<<" for "<<dc->d_remote.toStringWithPort()<<" validates correctly"<<endl;
@@ -1318,9 +1325,11 @@ void handleRunningTCPQuestion(int fd, FDMultiplexer::funcparam_t& var)
         }
       }
 #ifdef HAVE_PROTOBUF
-      if(luaconfsLocal->protobufServer) {
+      if(luaconfsLocal->protobufServer || luaconfsLocal->outgoingProtobufServer) {
         dc->d_uuid = (*t_uuidGenerator)();
+      }
 
+      if(luaconfsLocal->protobufServer) {
         try {
           const struct dnsheader* dh = (const struct dnsheader*) conn->data;
           dc->d_ednssubnet = ednssubnet;
@@ -1421,9 +1430,11 @@ string* doProcessUDPQuestion(const std::string& question, const ComboAddress& fr
 #ifdef HAVE_PROTOBUF
   boost::uuids::uuid uniqueId;
   auto luaconfsLocal = g_luaconfs.getLocal();
-  if (luaconfsLocal->protobufServer) {
-    needECS = true;
+  if (luaconfsLocal->protobufServer || luaconfsLocal->outgoingProtobufServer) {
     uniqueId = (*t_uuidGenerator)();
+    if (luaconfsLocal->protobufServer) {
+      needECS = true;
+    }
   }
 #endif
   Netmask ednssubnet;
@@ -1545,7 +1556,7 @@ string* doProcessUDPQuestion(const std::string& question, const ComboAddress& fr
   dc->d_tcp=false;
   dc->d_policyTags = policyTags;
 #ifdef HAVE_PROTOBUF
-  if (luaconfsLocal->protobufServer) {
+  if (luaconfsLocal->protobufServer || luaconfsLocal->outgoingProtobufServer) {
     dc->d_uuid = uniqueId;
   }
   dc->d_ednssubnet = ednssubnet;
