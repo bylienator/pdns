@@ -13,11 +13,18 @@
 
 AuthLua4::AuthLua4(const std::string& fname) { }
 bool AuthLua4::updatePolicy(const DNSName &qname, QType qtype, const DNSName &zonename, DNSPacket *packet) { return false; }
+AuthLua4::~AuthLua4()
+{
+}
 
 #else
 
 #undef L
 #include "ext/luawrapper/include/LuaContext.hpp"
+
+AuthLua4::~AuthLua4()
+{
+}
 
 AuthLua4::AuthLua4(const std::string& fname) {
   d_lw = std::unique_ptr<LuaContext>(new LuaContext);
