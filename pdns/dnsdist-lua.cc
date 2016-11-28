@@ -634,14 +634,7 @@ vector<std::function<void(void)>> setupLua(bool client, const std::string& confi
       int counter=0;
       auto states = g_dstates.getCopy();
       for(const auto& s : states) {
-	string status;
-	if(s->availability == DownstreamState::Availability::Up) 
-	  status = "UP";
-	else if(s->availability == DownstreamState::Availability::Down) 
-	  status = "DOWN";
-	else 
-	  status = (s->upStatus ? "up" : "down");
-
+	string status = s->getStatus();
 	string pools;
 	for(auto& p : s->pools) {
 	  if(!pools.empty())
@@ -1484,6 +1477,13 @@ vector<std::function<void(void)>> setupLua(bool client, const std::string& confi
   g_lua.registerMember<bool (DNSQuestion::*)>("useECS", [](const DNSQuestion& dq) -> bool { return dq.useECS; }, [](DNSQuestion& dq, bool useECS) { dq.useECS = useECS; });
   g_lua.registerMember<bool (DNSQuestion::*)>("ecsOverride", [](const DNSQuestion& dq) -> bool { return dq.ecsOverride; }, [](DNSQuestion& dq, bool ecsOverride) { dq.ecsOverride = ecsOverride; });
   g_lua.registerMember<uint16_t (DNSQuestion::*)>("ecsPrefixLength", [](const DNSQuestion& dq) -> uint16_t { return dq.ecsPrefixLength; }, [](DNSQuestion& dq, uint16_t newPrefixLength) { dq.ecsPrefixLength = newPrefixLength; });
+  g_lua.registerFunction<void(DNSQuestion::*)(std::string)>("sendTrap", [](const DNSQuestion& dq, boost::optional<std::string> reason) {
+#ifdef HAVE_NET_SNMP
+      if (g_snmpAgent && g_snmpTrapsEnabled) {
+        g_snmpAgent->sendDNSTrap(dq, reason ? *reason : "");
+      }
+#endif /* HAVE_NET_SNMP */
+    });
 
   /* LuaWrapper doesn't support inheritance */
   g_lua.registerMember<const ComboAddress (DNSResponse::*)>("localaddr", [](const DNSResponse& dq) -> const ComboAddress { return *dq.local; }, [](DNSResponse& dq, const ComboAddress newLocal) { (void) newLocal; });
@@ -1498,6 +1498,13 @@ vector<std::function<void(void)>> setupLua(bool client, const std::string& confi
   g_lua.registerMember<size_t (DNSResponse::*)>("size", [](const DNSResponse& dq) -> size_t { return dq.size; }, [](DNSResponse& dq, size_t newSize) { (void) newSize; });
   g_lua.registerMember<bool (DNSResponse::*)>("tcp", [](const DNSResponse& dq) -> bool { return dq.tcp; }, [](DNSResponse& dq, bool newTcp) { (void) newTcp; });
   g_lua.registerMember<bool (DNSResponse::*)>("skipCache", [](const DNSResponse& dq) -> bool { return dq.skipCache; }, [](DNSResponse& dq, bool newSkipCache) { dq.skipCache = newSkipCache; });
+  g_lua.registerFunction<void(DNSResponse::*)(std::string)>("sendTrap", [](const DNSResponse& dr, boost::optional<std::string> reason) {
+#ifdef HAVE_NET_SNMP
+      if (g_snmpAgent && g_snmpTrapsEnabled) {
+        g_snmpAgent->sendDNSTrap(dr, reason ? *reason : "");
+      }
+#endif /* HAVE_NET_SNMP */
+    });
 
   g_lua.writeFunction("setMaxTCPClientThreads", [](uint64_t max) {
       if (!g_configurationDone) {

@@ -89,6 +89,10 @@ std::vector<std::shared_ptr<DynBPFFilter> > g_dynBPFFilters;
 vector<ClientState *> g_frontends;
 GlobalStateHolder<pools_t> g_pools;
 
+bool g_snmpEnabled{false};
+bool g_snmpTrapsEnabled{false};
+DNSDistSNMPAgent* g_snmpAgent{nullptr};
+
 /* UDP: the grand design. Per socket we listen on for incoming queries there is one thread.
    Then we have a bunch of connected sockets for talking to downstream servers. 
    We send directly to those sockets.
@@ -1352,6 +1356,9 @@ void* healthChecksThread()
           warnlog("Marking downstream %s as '%s'", dss->getNameWithAddr(), newState ? "up" : "down");
           dss->upStatus = newState;
           dss->currentCheckFailures = 0;
+          if (g_snmpAgent && g_snmpTrapsEnabled) {
+            g_snmpAgent->sendBackendStatusChangeTrap(dss);
+          }
         }
       }
 
@@ -1742,7 +1749,6 @@ try
   
   if(g_locals.empty())
     g_locals.push_back(std::make_tuple(ComboAddress("127.0.0.1", 53), true, false, 0));
-  
 
   g_configurationDone = true;
 
@@ -1945,6 +1951,10 @@ try
 
   /* this need to be done _after_ dropping privileges */
   g_delay = new DelayPipe<DelayedPacket>();
+
+  if (g_snmpAgent) {
+    g_snmpAgent->run();
+  }
 
   g_tcpclientthreads = std::make_shared<TCPClientCollection>(g_maxTCPClientThreads);
 
