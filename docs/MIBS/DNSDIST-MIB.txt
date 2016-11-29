@@ -2,15 +2,15 @@
 -- ----------------------------------------------------------------------
 -- MIB file for dnsdist
 -- ----------------------------------------------------------------------
---
--- Currenly, only statistics are available.
 
 DNSDIST-MIB DEFINITIONS ::= BEGIN
 
 IMPORTS
     OBJECT-TYPE, MODULE-IDENTITY, enterprises,
-    Counter64, Gauge32, Unsigned32, Integer32, NOTIFICATION-TYPE
+    Counter64, Unsigned32, Integer32, NOTIFICATION-TYPE
         FROM SNMPv2-SMI
+    CounterBasedGauge64
+        FROM HCNUM-TC
     Float64TC
         FROM FLOAT-TC-MIB
     OBJECT-GROUP, MODULE-COMPLIANCE, NOTIFICATION-GROUP
@@ -25,8 +25,7 @@ dnsdist MODULE-IDENTITY
     ORGANIZATION "PowerDNS BV"
     CONTACT-INFO "support@powerdns.com"
     DESCRIPTION
-       "This MIB module describes information gathered through dnsdist.
-       Currently, only statistics are available."
+       "This MIB module describes information gathered through dnsdist."
 
     REVISION "201611080000Z"
     DESCRIPTION "Initial revision."
@@ -222,7 +221,7 @@ latencyAVG1000000 OBJECT-TYPE
     ::= { stats 23 }
 
 uptime OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -230,7 +229,7 @@ uptime OBJECT-TYPE
     ::= { stats 24 }
 
 realMemoryUsage OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -286,7 +285,7 @@ cacheMisses OBJECT-TYPE
     ::= { stats 31 }
 
 cpuUserMSec OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -294,7 +293,7 @@ cpuUserMSec OBJECT-TYPE
     ::= { stats 32 }
 
 cpuSysMSec OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -302,7 +301,7 @@ cpuSysMSec OBJECT-TYPE
     ::= { stats 33 }
 
 fdUsage OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -318,7 +317,7 @@ dynBlocked OBJECT-TYPE
     ::= { stats 35 }
 
 dynBlockNMGSize OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -341,23 +340,23 @@ backendStatEntry OBJECT-TYPE
     ::= { backendStatTable 1 }
 
 BackendStatEntry ::= SEQUENCE {
-    backendId           Gauge32,
+    backendId           Unsigned32,
     backendName         DisplayString,
-    backendLatency      Gauge32,
-    backendWeight       Gauge32,
-    backendOutstanding  Gauge32,
-    backendQPSLimit     Gauge32,
+    backendLatency      CounterBasedGauge64,
+    backendWeight       CounterBasedGauge64,
+    backendOutstanding  CounterBasedGauge64,
+    backendQPSLimit     CounterBasedGauge64,
     backendReused       Counter64,
     backendState        DisplayString,
     backendAddress      OCTET STRING,
     backendPools        DisplayString,
-    backendQPS          Gauge32,
+    backendQPS          CounterBasedGauge64,
     backendQueries      Counter64,
-    backendOrder        Gauge32
+    backendOrder        CounterBasedGauge64
 }
 
 backendId OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX Unsigned32
     MAX-ACCESS not-accessible
     STATUS current
     DESCRIPTION
@@ -373,7 +372,7 @@ backendName OBJECT-TYPE
     ::= { backendStatEntry 2 }
 
 backendLatency OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -381,7 +380,7 @@ backendLatency OBJECT-TYPE
     ::= { backendStatEntry 3 }
 
 backendWeight OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -389,7 +388,7 @@ backendWeight OBJECT-TYPE
     ::= { backendStatEntry 4 }
 
 backendOutstanding OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -397,7 +396,7 @@ backendOutstanding OBJECT-TYPE
     ::= { backendStatEntry 5 }
 
 backendQPSLimit OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -437,7 +436,7 @@ backendPools OBJECT-TYPE
     ::= { backendStatEntry 10 }
 
 backendQPS OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -453,7 +452,7 @@ backendQueries OBJECT-TYPE
     ::= { backendStatEntry 12 }
 
 backendOrder OBJECT-TYPE
-    SYNTAX Gauge32
+    SYNTAX CounterBasedGauge64
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -677,6 +676,7 @@ dnsdistGroup OBJECT-GROUP
 dnsdistTrapsGroup NOTIFICATION-GROUP
     NOTIFICATIONS {
         actionTrap,
+        customTrap,
         backendStatusChangeTrap
     }
     STATUS current

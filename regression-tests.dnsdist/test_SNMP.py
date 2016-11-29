@@ -22,7 +22,7 @@ class TestSNMP(DNSDistTest):
     """
 
     def _checkStatsValues(self, results, queriesCountersValue):
-        for i in range(1, 20) + range(26, 32) + [ 35 ] :
+        for i in range(1, 20) + range(24, 35) + [ 35 ] :
             oid = self._snmpOID + '.1.' + str(i) + '.0'
             self.assertTrue(oid in results)
             self.assertTrue(isinstance(results[oid], Counter64))
@@ -30,10 +30,6 @@ class TestSNMP(DNSDistTest):
         for i in range(20, 23):
             oid = self._snmpOID + '.1.' + str(i) + '.0'
             self.assertTrue(isinstance(results[oid], OctetString))
-
-        for i in range(24, 26) + range(32, 35) + [ 36 ]:
-            oid = self._snmpOID + '.1.' + str(i) + '.0'
-            self.assertTrue(isinstance(results[oid], Gauge32))
 
         # check uptime > 0
         self.assertGreater(results['1.3.6.1.4.1.43315.3.1.24.0'], 0)
@@ -54,15 +50,12 @@ class TestSNMP(DNSDistTest):
         print(results)
 
         ## types
-        for i in [3, 4, 5, 6, 11, 13]:
+        for i in [3, 4, 5, 6, 7, 11, 12, 13]:
             oid = self._snmpOID + '.2.1.' + str(i) + '.0'
-            self.assertTrue(isinstance(results[oid], Gauge32))
+            self.assertTrue(isinstance(results[oid], Counter64))
         for i in [2, 8, 9, 10]:
             oid = self._snmpOID + '.2.1.' + str(i) + '.0'
             self.assertTrue(isinstance(results[oid], OctetString))
-        for i in [7, 12]:
-            oid = self._snmpOID + '.2.1.' + str(i) + '.0'
-            self.assertTrue(isinstance(results[oid], Counter64))
 
         ## name
         self.assertEquals(results['1.3.6.1.4.1.43315.3.2.1.2.0'], "servername")

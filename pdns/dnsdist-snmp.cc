@@ -149,7 +149,7 @@ static void registerFloatStat(const char* name, const oid statOID[], size_t stat
                                                               HANDLER_CAN_RONLY));
 }
 
-static int handleGauge32Stats(netsnmp_mib_handler* handler,
+static int handleGauge64Stats(netsnmp_mib_handler* handler,
                               netsnmp_handler_registration* reginfo,
                               netsnmp_agent_request_info* reqinfo,
                               netsnmp_request_info* requests)
@@ -168,29 +168,25 @@ static int handleGauge32Stats(netsnmp_mib_handler* handler,
   }
 
   std::string str;
-  uint32_t value = (*boost::get<DNSDistStats::statfunction_t>(&it->second))(str);
-  snmp_set_var_typed_value(requests->requestvb,
-                           ASN_UNSIGNED,
-                           &value,
-                           sizeof(value));
-  return SNMP_ERR_NOERROR;
+  uint64_t value = (*boost::get<DNSDistStats::statfunction_t>(&it->second))(str);
+  return DNSDistSNMPAgent::setCounter64Value(requests, value);
 }
 
-static void registerGauge32Stat(const char* name, const oid statOID[], size_t statOIDLength, DNSDistStats::statfunction_t ptr)
+static void registerGauge64Stat(const char* name, const oid statOID[], size_t statOIDLength, DNSDistStats::statfunction_t ptr)
 {
   if (statOIDLength != OID_LENGTH(queriesOID)) {
-    errlog("Invalid OID for SNMP Gauge32 statistic %s", name);
+    errlog("Invalid OID for SNMP Gauge64 statistic %s", name);
     return;
   }
 
   if (s_statsMap.find(statOID[statOIDLength - 1]) != s_statsMap.end()) {
-    errlog("OID for SNMP Gauge32 statistic %s has already been registered", name);
+    errlog("OID for SNMP Gauge64 statistic %s has already been registered", name);
     return;
   }
 
   s_statsMap[statOID[statOIDLength - 1]] = ptr;
   netsnmp_register_scalar(netsnmp_create_handler_registration(name,
-                                                              handleGauge32Stats,
+                                                              handleGauge64Stats,
                                                               statOID,
                                                               statOIDLength,
                                                               HANDLER_CAN_RONLY));
@@ -245,7 +241,7 @@ static netsnmp_variable_list* backendStatTable_get_next_data_point(void** loop_c
   }
 
   *my_data_context = (void*) (s_servers[s_currentServerIdx]).get();
-  snmp_set_var_typed_integer(put_index_data, ASN_GAUGE, s_currentServerIdx);
+  snmp_set_var_typed_integer(put_index_data, ASN_UNSIGNED, s_currentServerIdx);
   s_currentServerIdx++;
 
   return put_index_data;
@@ -298,24 +294,20 @@ static int backendStatTable_handler(netsnmp_mib_handler* handler,
                                  server->name.size());
         break;
       case COLUMN_BACKENDLATENCY:
-        snmp_set_var_typed_integer(request->requestvb,
-                                   ASN_GAUGE,
-                                   server->latencyUsec/1000.0);
+        DNSDistSNMPAgent::setCounter64Value(request,
+                                            server->latencyUsec/1000.0);
         break;
       case COLUMN_BACKENDWEIGHT:
-        snmp_set_var_typed_integer(request->requestvb,
-                                   ASN_GAUGE,
-                                   server->weight);
+        DNSDistSNMPAgent::setCounter64Value(request,
+                                            server->weight);
         break;
       case COLUMN_BACKENDOUTSTANDING:
-        snmp_set_var_typed_integer(request->requestvb,
-                                   ASN_GAUGE,
-                                   server->outstanding);
+        DNSDistSNMPAgent::setCounter64Value(request,
+                                            server->outstanding);
         break;
       case COLUMN_BACKENDQPSLIMIT:
-        snmp_set_var_typed_integer(request->requestvb,
-                                   ASN_GAUGE,
-                                   server->qps.getRate());
+        DNSDistSNMPAgent::setCounter64Value(request,
+                                            server->qps.getRate());
         break;
       case COLUMN_BACKENDREUSED:
         DNSDistSNMPAgent::setCounter64Value(request, server->reuseds);
@@ -353,17 +345,13 @@ static int backendStatTable_handler(netsnmp_mib_handler* handler,
         break;
       }
       case COLUMN_BACKENDQPS:
-        snmp_set_var_typed_integer(request->requestvb,
-                                   ASN_GAUGE,
-                                   server->queryLoad);
+        DNSDistSNMPAgent::setCounter64Value(request, server->queryLoad);
         break;
       case COLUMN_BACKENDQUERIES:
         DNSDistSNMPAgent::setCounter64Value(request, server->queries);
         break;
       case COLUMN_BACKENDORDER:
-        snmp_set_var_typed_integer(request->requestvb,
-                                   ASN_GAUGE,
-                                   server->order);
+        DNSDistSNMPAgent::setCounter64Value(request, server->order);
         break;
       default:
         netsnmp_set_request_error(reqinfo,
@@ -582,12 +570,12 @@ DNSDistSNMPAgent::DNSDistSNMPAgent(const std::string& name, const std::string& m
   registerFloatStat("latencyAvg1000", latencyAvg1000OID, OID_LENGTH(latencyAvg1000OID), &g_stats.latencyAvg1000);
   registerFloatStat("latencyAvg10000", latencyAvg10000OID, OID_LENGTH(latencyAvg10000OID), &g_stats.latencyAvg10000);
   registerFloatStat("latencyAvg1000000", latencyAvg1000000OID, OID_LENGTH(latencyAvg1000000OID), &g_stats.latencyAvg1000000);
-  registerGauge32Stat("uptime", uptimeOID, OID_LENGTH(uptimeOID), &uptimeOfProcess);
-  registerGauge32Stat("realMemoryUsage", realMemoryUsageOID, OID_LENGTH(realMemoryUsageOID), &getRealMemoryUsage);
-  registerGauge32Stat("cpuUserMSec", cpuUserMSecOID, OID_LENGTH(cpuUserMSecOID), &getCPUTimeUser);
-  registerGauge32Stat("cpuSysMSec", cpuSysMSecOID, OID_LENGTH(cpuSysMSecOID), &getCPUTimeSystem);
-  registerGauge32Stat("fdUsage", fdUsageOID, OID_LENGTH(fdUsageOID), &getOpenFileDescriptors);
-  registerGauge32Stat("dynBlockedNMGSize", dynBlockedNMGSizeOID, OID_LENGTH(dynBlockedNMGSizeOID), [](const std::string&) { return g_dynblockNMG.getLocal()->size(); });
+  registerGauge64Stat("uptime", uptimeOID, OID_LENGTH(uptimeOID), &uptimeOfProcess);
+  registerGauge64Stat("realMemoryUsage", realMemoryUsageOID, OID_LENGTH(realMemoryUsageOID), &getRealMemoryUsage);
+  registerGauge64Stat("cpuUserMSec", cpuUserMSecOID, OID_LENGTH(cpuUserMSecOID), &getCPUTimeUser);
+  registerGauge64Stat("cpuSysMSec", cpuSysMSecOID, OID_LENGTH(cpuSysMSecOID), &getCPUTimeSystem);
+  registerGauge64Stat("fdUsage", fdUsageOID, OID_LENGTH(fdUsageOID), &getOpenFileDescriptors);
+  registerGauge64Stat("dynBlockedNMGSize", dynBlockedNMGSizeOID, OID_LENGTH(dynBlockedNMGSizeOID), [](const std::string&) { return g_dynblockNMG.getLocal()->size(); });
 
 
   netsnmp_table_registration_info* table_info = SNMP_MALLOC_TYPEDEF(netsnmp_table_registration_info);
