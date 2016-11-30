@@ -7,7 +7,7 @@ DNSDIST-MIB DEFINITIONS ::= BEGIN
 
 IMPORTS
     OBJECT-TYPE, MODULE-IDENTITY, enterprises,
-    Counter64, Unsigned32, Integer32, NOTIFICATION-TYPE
+    Counter64, Unsigned32, NOTIFICATION-TYPE
         FROM SNMPv2-SMI
     CounterBasedGauge64
         FROM HCNUM-TC
@@ -17,7 +17,7 @@ IMPORTS
         FROM SNMPv2-CONF
     InetAddressType
         FROM INET-ADDRESS-MIB
-    DisplayString
+    TEXTUAL-CONVENTION, DisplayString
         FROM SNMPv2-TC;
 
 dnsdist MODULE-IDENTITY
@@ -460,6 +460,30 @@ backendOrder OBJECT-TYPE
     ::= { backendStatEntry 13 }
 
 ---
+--- Textual Conventions
+---
+
+SocketProtocolType ::= TEXTUAL-CONVENTION
+    STATUS      current
+    DESCRIPTION
+        "A value that represents a type of socket protocol."
+    SYNTAX       INTEGER {
+                     unknown(0),
+                     udp(1),
+                     tcp(2)
+                 }
+
+DNSQueryType ::= TEXTUAL-CONVENTION
+    STATUS      current
+    DESCRIPTION
+        "A value that represents a type of DNS query (question or response)."
+    SYNTAX       INTEGER {
+                     unknown(0),
+                     question(1),
+                     response(2)
+                 }
+
+---
 --- Traps / Notifications
 ---
 
@@ -476,7 +500,7 @@ socketFamily OBJECT-TYPE
     ::= { trapObjects 1 }
 
 socketProtocol OBJECT-TYPE
-    SYNTAX Integer32
+    SYNTAX SocketProtocolType
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
@@ -500,7 +524,7 @@ toAddress OBJECT-TYPE
     ::= { trapObjects 4 }
 
 queryType OBJECT-TYPE
-    SYNTAX Integer32
+    SYNTAX DNSQueryType
     MAX-ACCESS read-only
     STATUS current
     DESCRIPTION
