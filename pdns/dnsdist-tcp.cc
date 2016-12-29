@@ -61,7 +61,9 @@ static int setupTCPDownstream(shared_ptr<DownstreamState> ds, uint16_t& downstre
         SBind(sock, ds->sourceAddr);
       }
       setNonBlocking(sock);
-      SConnectWithTimeout(sock, ds->remote, ds->tcpConnectTimeout);
+      if (!ds->tcpFastOpen) {
+        SConnectWithTimeout(sock, ds->remote, ds->tcpConnectTimeout);
+      }
       return sock;
     }
     catch(const std::runtime_error& e) {
@@ -175,38 +177,108 @@ catch(...) {
   return false;
 }
 
-static bool putNonBlockingMsgLen(int fd, uint16_t len, int timeout)
-try
+static bool sendSizeAndMsgWithTimeout(int sock, uint16_t bufferLen, const char* buffer, int idleTimeout, const ComboAddress* dest, const ComboAddress* local, unsigned int localItf, int totalTimeout, int flags)
 {
-  uint16_t raw = htons(len);
-  size_t ret = writen2WithTimeout(fd, &raw, sizeof raw, timeout);
-  return ret == sizeof raw;
-}
-catch(...) {
-  return false;
-}
+  uint16_t size = htons(bufferLen);
+  char cbuf[256];
+  struct msghdr msgh;
+  struct iovec iov[2];
+  size_t pos = 0;
+  int remainingTime = totalTimeout;
+  time_t start = 0;
+  if (totalTimeout) {
+    start = time(NULL);
+  }
 
-static bool sendNonBlockingMsgLen(int fd, uint16_t len, int timeout, ComboAddress& dest, ComboAddress& local, unsigned int localItf)
-try
-{
-  if (localItf == 0)
-    return putNonBlockingMsgLen(fd, len, timeout);
+  /* Set up iov and msgh structures. */
+  memset(&msgh, 0, sizeof(struct msghdr));
+  msgh.msg_control = nullptr;
+  msgh.msg_controllen = 0;
+  if (dest) {
+    vinfolog("dest is not null, size %d", dest->getSocklen());
+    msgh.msg_name = (void*) dest;
+    msgh.msg_namelen = dest->getSocklen();
+  }
+  else {
+    vinfolog("dest is null");
+    msgh.msg_name = nullptr;
+    msgh.msg_namelen = 0;
+  }
 
-  uint16_t raw = htons(len);
-  ssize_t ret = sendMsgWithTimeout(fd, (char*) &raw, sizeof raw, timeout, dest, local, localItf);
-  return ret == sizeof raw;
-}
-catch(...) {
+  msgh.msg_flags = 0;
+
+  if (localItf != 0 && local) {
+    addCMsgSrcAddr(&msgh, cbuf, local, localItf);
+  }
+
+  iov[0].iov_base = &size;
+  iov[0].iov_len = sizeof(size);
+  iov[1].iov_base = (void*) buffer;
+  iov[1].iov_len = bufferLen;
+
+  size_t sent = 0;
+  size_t nbElements = sizeof(iov)/sizeof(*iov);
+  while (true) {
+    msgh.msg_iov = &iov[pos];
+    msgh.msg_iovlen = nbElements - pos;
+
+    ssize_t res = sendmsg(sock, &msgh, flags);
+    if (res > 0) {
+      sent += (size_t) res;
+
+      if (sent == sizeof(size) + bufferLen) {
+        return true;
+      }
+      do {
+        if ((size_t) res < iov[pos].iov_len) {
+          iov[pos].iov_len -= res;
+          res = 0;
+        }
+        else {
+          res -= iov[pos].iov_len;
+          iov[pos].iov_len = 0;
+          pos++;
+        }
+      }
+      while (res > 0 && pos < nbElements);
+    }
+    else if (res == -1) {
+      if (errno == EINTR)
+        continue;
+      else if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
+        /* EINPROGRESS might happen with non blocking socket,
+           especially with TCP Fast Open */
+        int ret = waitForRWData(sock, false, (totalTimeout == 0 || idleTimeout <= remainingTime) ? idleTimeout : remainingTime, 0);
+        if (ret > 0) {
+          /* there is room available */
+        }
+        else if (ret == 0) {
+          throw runtime_error("Timeout while waiting to send data");
+        } else {
+          throw runtime_error("Error while waiting for room to send data");
+        }
+      }
+      else {
+        unixDie("failed in sendSizeAndMsgWithTimeout");
+      }
+    }
+    if (totalTimeout) {
+      time_t now = time(NULL);
+      int elapsed = now - start;
+      if (elapsed >= remainingTime) {
+        throw runtime_error("Timeout while sending data");
+      }
+      start = now;
+      remainingTime -= elapsed;
+    }
+  }
+
   return false;
 }
 
 static bool sendResponseToClient(int fd, const char* response, uint16_t responseLen)
 {
-  if (!putNonBlockingMsgLen(fd, responseLen, g_tcpSendTimeout))
-    return false;
-
-  writen2WithTimeout(fd, response, responseLen, g_tcpSendTimeout);
-  return true;
+  return sendSizeAndMsgWithTimeout(fd, responseLen, response, g_tcpSendTimeout, nullptr, nullptr, 0, 0, 0);
 }
 
 static bool maxConnectionDurationReached(unsigned int maxConnectionDuration, time_t start, unsigned int& remainingTime)
@@ -456,12 +528,15 @@ void* tcpClientThread(int pipefd)
 
 	int dsock = -1;
 	uint16_t downstreamFailures=0;
+        bool freshConn = true;
 	if(sockets.count(ds->remote) == 0) {
 	  dsock=setupTCPDownstream(ds, downstreamFailures);
 	  sockets[ds->remote]=dsock;
 	}
-	else
+	else {
 	  dsock=sockets[ds->remote];
+          freshConn = false;
+        }
 
         ds->queries++;
         ds->outstanding++;
@@ -481,24 +556,15 @@ void* tcpClientThread(int pipefd)
           break;
         }
 
-        if(!sendNonBlockingMsgLen(dsock, dq.len, ds->tcpSendTimeout, ds->remote, ds->sourceAddr, ds->sourceItf)) {
-	  vinfolog("Downstream connection to %s died on us, getting a new one!", ds->getName());
-          close(dsock);
-          dsock=-1;
-          sockets.erase(ds->remote);
-          downstreamFailures++;
-          dsock=setupTCPDownstream(ds, downstreamFailures);
-          sockets[ds->remote]=dsock;
-          goto retry;
-        }
-
         try {
-          if (ds->sourceItf == 0) {
-            writen2WithTimeout(dsock, query, dq.len, ds->tcpSendTimeout);
+          int flags = 0;
+#ifdef MSG_FASTOPEN
+          if (ds->tcpFastOpen && freshConn) {
+            vinfolog("Setting msg_fastopen");
+            flags |= MSG_FASTOPEN;
           }
-          else {
-            sendMsgWithTimeout(dsock, query, dq.len, ds->tcpSendTimeout, ds->remote, ds->sourceAddr, ds->sourceItf);
-          }
+#endif /* MSG_FASTOPEN */
+          sendSizeAndMsgWithTimeout(dsock, dq.len, query, ds->tcpSendTimeout, &ds->remote, &ds->sourceAddr, ds->sourceItf, 0, flags);
         }
         catch(const runtime_error& e) {
           vinfolog("Downstream connection to %s died on us, getting a new one!", ds->getName());
@@ -508,6 +574,7 @@ void* tcpClientThread(int pipefd)
           downstreamFailures++;
           dsock=setupTCPDownstream(ds, downstreamFailures);
           sockets[ds->remote]=dsock;
+          freshConn=true;
           goto retry;
         }
 
@@ -527,6 +594,7 @@ void* tcpClientThread(int pipefd)
           downstreamFailures++;
           dsock=setupTCPDownstream(ds, downstreamFailures);
           sockets[ds->remote]=dsock;
+          freshConn=true;
           if(xfrStarted) {
             goto drop;
           }
@@ -585,16 +653,22 @@ void* tcpClientThread(int pipefd)
           break;
         }
 
-        if (isXFR && dh->rcode == 0 && dh->ancount != 0) {
-          if (xfrStarted == false) {
-            xfrStarted = true;
-            if (getRecordsOfTypeCount(response, responseLen, 1, QType::SOA) == 1) {
+        if (isXFR) {
+          if (dh->rcode == 0 && dh->ancount != 0) {
+            if (xfrStarted == false) {
+              xfrStarted = true;
+              if (getRecordsOfTypeCount(response, responseLen, 1, QType::SOA) == 1) {
+                goto getpacket;
+              }
+            }
+            else if (getRecordsOfTypeCount(response, responseLen, 1, QType::SOA) == 0) {
               goto getpacket;
             }
           }
-          else if (getRecordsOfTypeCount(response, responseLen, 1, QType::SOA) == 0) {
-            goto getpacket;
-          }
+          /* Don't reuse the TCP connection after a XFR */
+          close(dsock);
+          dsock=-1;
+          sockets.erase(ds->remote);
         }
 
         g_stats.responses++;

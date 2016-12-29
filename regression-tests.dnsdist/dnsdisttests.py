@@ -200,8 +200,11 @@ class DNSDistTest(unittest.TestCase):
                 response = copy.copy(response)
                 response.id = request.id
                 wire = response.to_wire()
-                conn.send(struct.pack("!H", len(wire)))
-                conn.send(wire)
+                try:
+                    conn.send(struct.pack("!H", len(wire)))
+                    conn.send(wire)
+                except socket.error as e:
+                    break
 
             conn.close()
 
