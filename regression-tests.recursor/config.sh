@@ -604,7 +604,7 @@ function preresolve(dq)
     return true
   end
   if dq.qname:equal("android.marvin.example.net") then
-    dq.wantsRPZ = false -- disable RPZ
+--    dq.wantsRPZ = false -- disable RPZ
   end
   if dq.appliedPolicy.policyKind == pdns.policykinds.Custom then
     if dq.qname:equal("www3.example.net") then
