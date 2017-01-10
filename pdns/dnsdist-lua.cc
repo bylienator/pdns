@@ -1128,9 +1128,24 @@ vector<std::function<void(void)>> setupLua(bool client, const std::string& confi
   g_lua.registerFunction<size_t(DNSName::*)()>("wirelength", [](const DNSName& name) { return name.wirelength(); });
   g_lua.registerFunction<string(DNSName::*)()>("tostring", [](const DNSName&dn ) { return dn.toString(); });
   g_lua.registerFunction<string(DNSName::*)()>("toString", [](const DNSName&dn ) { return dn.toString(); });
-  g_lua.writeFunction("newDNSName", [](const std::string& name) { return DNSName(name); });
-  g_lua.writeFunction("newSuffixMatchNode", []() { return SuffixMatchNode(); });
+  g_lua.registerFunction<bool(DNSName::*)()>("chopOff", [](DNSName& dn) { return dn.chopOff(); });
+  g_lua.writeFunction("newDNSName", [](boost::variant<const std::string, const DNSName> orig) {
+      if(orig.which() == 0) {
+        return DNSName(boost::get<const std::string>(orig));
+      }
+      else {
+        return DNSName(boost::get<const DNSName>(orig));
+      }
+    });
+  g_lua.registerFunction<bool(DNSName::*)(const std::string&)>(
+    "equal",
+     [](const DNSName& lhs, const std::string& rhs) {
+       return lhs==DNSName(rhs);
+    }
+  );
+  g_lua.registerFunction("__eq", &DNSName::operator==);
 
+  g_lua.writeFunction("newSuffixMatchNode", []() { return SuffixMatchNode(); });
   g_lua.registerFunction("add",(void (SuffixMatchNode::*)(const DNSName&)) &SuffixMatchNode::add);
   g_lua.registerFunction("check",(bool (SuffixMatchNode::*)(const DNSName&) const) &SuffixMatchNode::check);
 
