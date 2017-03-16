@@ -57,7 +57,7 @@
 #endif
 
 void primeHints(void);
-int getRootNS(void);
+
 class RecursorLua4;
 
 struct BothRecordsAndSignatures
@@ -289,6 +289,8 @@ public:
 
   explicit SyncRes(const struct timeval& now);
 
+  typedef std::function<int(const ComboAddress& ip, const DNSName& qdomain, int qtype, bool doTCP, bool sendRDQuery, int EDNS0Level, struct timeval* now, boost::optional<Netmask>& srcmask, boost::optional<const ResolveContext&> context, std::shared_ptr<RemoteLogger> outgoingLogger, LWResult *lwr)> asyncresolve_t;
+
   int beginResolve(const DNSName &qname, const QType &qtype, uint16_t qclass, vector<DNSRecord>&ret);
   void setId(int id)
   {
@@ -324,6 +326,26 @@ public:
     d_doEDNS0=state;
   }
 
+  void setDoDNSSEC(bool state=true)
+  {
+    d_doDNSSEC=state;
+  }
+
+  void setWantsRPZ(bool state=true)
+  {
+    d_wantsRPZ=state;
+  }
+
+  bool getWantsRPZ() const
+  {
+    return d_wantsRPZ;
+  }
+
+  void setIncomingECSFound(bool state=true)
+  {
+    d_incomingECSFound=state;
+  }
+
   string getTrace() const
   {
     return d_trace.str();
@@ -344,14 +366,35 @@ public:
     return d_wasOutOfBand;
   }
 
+  struct timeval getNow() const
+  {
+    return d_now;
+  }
+
   void setSkipCNAMECheck(bool skip = false)
   {
     d_skipCNAMECheck = skip;
   }
 
-  int asyncresolveWrapper(const ComboAddress& ip, bool ednsMANDATORY, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, struct timeval* now, boost::optional<Netmask>& srcmask, LWResult* res) const;
+  void setIncomingECS(boost::optional<const EDNSSubnetOpts&> incomingECS)
+  {
+    d_incomingECS = incomingECS;
+  }
+
+#ifdef HAVE_PROTOBUF
+  void setInitialRequestId(boost::optional<const boost::uuids::uuid&> initialRequestId)
+  {
+    d_initialRequestId = initialRequestId;
+  }
+#endif
+
+  void setAsyncCallback(asyncresolve_t func)
+  {
+    d_asyncResolve = func;
+  }
 
   static void doEDNSDumpAndClose(int fd);
+  static int getRootNS(struct timeval now, asyncresolve_t asyncCallback);
 
   static std::atomic<uint64_t> s_queries;
   static std::atomic<uint64_t> s_outgoingtimeouts;
@@ -370,10 +413,6 @@ public:
   static unsigned int s_maxdepth;
   std::unordered_map<std::string,bool> d_discardedPolicies;
   DNSFilterEngine::Policy d_appliedPolicy;
-  boost::optional<const EDNSSubnetOpts&> d_incomingECS;
-#ifdef HAVE_PROTOBUF
-  boost::optional<const boost::uuids::uuid&> d_initialRequestId;
-#endif
   unsigned int d_outqueries;
   unsigned int d_tcpoutqueries;
   unsigned int d_throttledqueries;
@@ -381,14 +420,7 @@ public:
   unsigned int d_unreachables;
   unsigned int d_totUsec;
   ComboAddress d_requestor;
-  bool d_doDNSSEC;
-  
-  bool d_wasVariable{false};
-  bool d_wasOutOfBand{false};
-  bool d_wantsRPZ{true};
-  bool d_skipCNAMECheck{false};
-  bool d_incomingECSFound{false};
-  
+
   typedef multi_index_container <
     NegCacheEntry,
     indexed_by <
@@ -495,7 +527,6 @@ public:
 
   typedef Counters<ComboAddress> fails_t;
 
-  struct timeval d_now;
   static unsigned int s_maxnegttl;
   static unsigned int s_maxcachettl;
   static unsigned int s_packetcachettl;
@@ -539,13 +570,27 @@ private:
   RCode::rcodes_ updateCacheFromRecords(const std::string& prefix, LWResult& lwr, const DNSName& qname, const DNSName& auth, NsSet& nameservers, const DNSName& tns, const boost::optional<Netmask>);
   bool processRecords(const std::string& prefix, const DNSName& qname, const QType& qtype, const DNSName& auth, LWResult& lwr, const bool sendRDQuery, vector<DNSRecord>& ret, set<DNSName>& nsset, DNSName& newtarget, DNSName& newauth, bool& realreferral, bool& negindic, bool& sawDS);
 
+  int asyncresolveWrapper(const ComboAddress& ip, bool ednsMANDATORY, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, struct timeval* now, boost::optional<Netmask>& srcmask, LWResult* res) const;
+
 private:
   ostringstream d_trace;
   shared_ptr<RecursorLua4> d_pdl;
+  boost::optional<const EDNSSubnetOpts&> d_incomingECS;
+#ifdef HAVE_PROTOBUF
+  boost::optional<const boost::uuids::uuid&> d_initialRequestId;
+#endif
+  asyncresolve_t d_asyncResolve{nullptr};
+  struct timeval d_now;
   string d_prefix;
   bool d_cacheonly;
   bool d_nocache;
-  bool d_doEDNS0;
+  bool d_doDNSSEC;
+  bool d_doEDNS0{true};
+  bool d_incomingECSFound{false};
+  bool d_skipCNAMECheck{false};
+  bool d_wantsRPZ{true};
+  bool d_wasOutOfBand{false};
+  bool d_wasVariable{false};
 
   static LogMode s_lm;
   LogMode d_lm;
