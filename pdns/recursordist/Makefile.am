@@ -178,15 +178,17 @@ testrunner_SOURCES = \
 	base32.cc \
 	base64.cc base64.hh \
 	dns.cc dns.hh \
+	dns_random.cc dns_random.hh \
 	dnslabeltext.cc \
 	dnsname.cc dnsname.hh \
 	dnsparser.hh dnsparser.cc \
-	dns_random.cc dns_random.hh \
 	dnsrecords.cc \
 	dnssecinfra.cc \
 	dnswriter.cc dnswriter.hh \
+	ecs.cc \
 	ednsoptions.cc ednsoptions.hh \
 	ednssubnet.cc ednssubnet.hh \
+	filterpo.cc filterpo.hh \
 	gettime.cc gettime.hh \
 	gss_context.cc gss_context.hh \
 	iputils.cc iputils.hh \
@@ -197,14 +199,25 @@ testrunner_SOURCES = \
 	pdnsexception.hh \
 	protobuf.cc protobuf.hh \
 	qtype.cc qtype.hh \
+	randomhelper.cc \
 	rcpgenerator.cc \
-	recpacketcache.cc recpacketcache.hh \
 	rec-protobuf.cc rec-protobuf.hh \
+	recpacketcache.cc recpacketcache.hh \
+	recursor_cache.cc recursor_cache.hh \
 	responsestats.cc \
+	root-dnssec.hh \
 	sillyrecords.cc \
 	sholder.hh \
 	sstuff.hh \
-	test-arguments_cc.cc \
+	syncres.cc syncres.hh \
+	test-syncres_cc.cc \
+	testrunner.cc \
+	unix_utility.cc \
+	validate.cc validate.hh \
+	validate-recursor.cc validate-recursor.hh \
+	zoneparser-tng.cc zoneparser-tng.hh
+
+#	test-arguments_cc.cc \
 	test-base32_cc.cc \
 	test-base64_cc.cc \
 	test-dnsrecordcontent.cc \
@@ -217,10 +230,7 @@ testrunner_SOURCES = \
 	test-nmtree.cc \
 	test-rcpgenerator_cc.cc \
 	test-recpacketcache_cc.cc \
-	test-tsig.cc \
-	testrunner.cc \
-	unix_utility.cc \
-	zoneparser-tng.cc zoneparser-tng.hh
+	test-tsig.cc
 
 testrunner_LDFLAGS = \
 	$(AM_LDFLAGS) \
