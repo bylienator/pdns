@@ -347,7 +347,7 @@ int SyncRes::asyncresolveWrapper(const ComboAddress& ip, bool ednsMANDATORY, con
   */
 
   SyncRes::EDNSStatus* ednsstatus;
-  ednsstatus = &t_sstorage->ednsstatus[ip]; // does this include port? 
+  ednsstatus = &t_sstorage->ednsstatus[ip]; // does this include port? YES
 
   if(ednsstatus->modeSetAt && ednsstatus->modeSetAt + 3600 < d_now.tv_sec) {
     *ednsstatus=SyncRes::EDNSStatus();

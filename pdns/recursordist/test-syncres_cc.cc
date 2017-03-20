@@ -6,6 +6,7 @@
 #include "lua-recursor4.hh"
 #include "namespaces.hh"
 #include "rec-lua-conf.hh"
+#include "root-dnssec.hh"
 #include "syncres.hh"
 #include "validate-recursor.hh"
 
@@ -28,10 +29,6 @@ ArgvMap &arg()
 int getMTaskerTID()
 {
   return 0;
-}
-
-LuaConfigItems::LuaConfigItems()
-{
 }
 
 bool RecursorLua4::preoutquery(const ComboAddress& ns, const ComboAddress& requestor, const DNSName& query, const QType& qtype, bool isTcp, vector<DNSRecord>& res, int& ret)
@@ -89,6 +86,14 @@ void primeHints(void)
   t_RC->replace(time(0), g_rootdnsname, QType(QType::NS), nsset, vector<std::shared_ptr<RRSIGRecordContent>>(), false); // and stuff in the cache
 }
 
+LuaConfigItems::LuaConfigItems()
+{
+  for (const auto &dsRecord : rootDSs) {
+    auto ds=unique_ptr<DSRecordContent>(dynamic_cast<DSRecordContent*>(DSRecordContent::make(dsRecord)));
+    dsAnchors[g_rootdnsname].insert(*ds);
+  }
+}
+
 /* Some helpers functions */
 
 static void init(bool debug=false)
@@ -135,6 +140,12 @@ static void initSR(std::unique_ptr<SyncRes>& sr, bool edns0, bool dnssec)
   sr->setDoEDNS0(edns0);
   sr->setDoDNSSEC(dnssec);
   t_sstorage->domainmap = g_initialDomainMap;
+  t_sstorage->negcache.clear();
+  t_sstorage->nsSpeeds.clear();
+  t_sstorage->ednsstatus.clear();
+  t_sstorage->throttle.clear();
+  t_sstorage->fails.clear();
+  t_sstorage->dnssecmap.clear();
 }
 
 /* Real tests */
@@ -146,22 +157,26 @@ BOOST_AUTO_TEST_CASE(test_root_primed) {
   init();
   initSR(sr, true, false);
 
-  t_RC->doWipeCache(g_rootdnsname, true);
-
   primeHints();
 
   /* we are primed, we should be able to resolve NS . without any query */
   vector<DNSRecord> ret;
   int res = sr->beginResolve(DNSName("."), QType(QType::NS), QClass::IN, ret);
   BOOST_CHECK_EQUAL(res, 0);
+  BOOST_CHECK_EQUAL(ret.size(), 13);
 }
 
 BOOST_AUTO_TEST_CASE(test_root_not_primed) {
   std::unique_ptr<SyncRes> sr;
   init(false);
   initSR(sr, true, false);
-  sr->setAsyncCallback([](const ComboAddress& ip, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, int EDNS0Level, struct timeval* now, boost::optional<Netmask>& srcmask, boost::optional<const ResolveContext&> context, std::shared_ptr<RemoteLogger> outgoingLogger, LWResult* res) {
-      //     cerr<<"asyncresolve called to ask "<<ip.toString()<<" about "<<domain.toString()<<" / "<<QType(type).getName()<<" over "<<(doTCP ? "TCP" : "UDP")<<" (rd: "<<sendRDQuery<<", EDNS0 level: "<<EDNS0Level<<")"<<endl;
+
+  size_t queriesCount = 0;
+
+  sr->setAsyncCallback([&queriesCount](const ComboAddress& ip, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, int EDNS0Level, struct timeval* now, boost::optional<Netmask>& srcmask, boost::optional<const ResolveContext&> context, std::shared_ptr<RemoteLogger> outgoingLogger, LWResult* res) {
+           cerr<<"asyncresolve called to ask "<<ip.toString()<<" about "<<domain.toString()<<" / "<<QType(type).getName()<<" over "<<(doTCP ? "TCP" : "UDP")<<" (rd: "<<sendRDQuery<<", EDNS0 level: "<<EDNS0Level<<")"<<endl;
+      queriesCount++;
+
       if (domain == g_rootdnsname && type == QType::NS) {
         res->d_rcode = 0;
         res->d_aabit = true;
@@ -188,29 +203,40 @@ BOOST_AUTO_TEST_CASE(test_root_not_primed) {
       return 0;
     });
 
-  t_RC->doWipeCache(g_rootdnsname, true);
-
   /* we are not primed yet, so SyncRes will have to call primeHints()
      then call getRootNS(), for which at least one of the root servers needs to answer */
   vector<DNSRecord> ret;
   int res = sr->beginResolve(DNSName("."), QType(QType::NS), QClass::IN, ret);
   BOOST_CHECK_EQUAL(res, 0);
+  BOOST_CHECK_EQUAL(ret.size(), 1);
+  BOOST_CHECK_EQUAL(queriesCount, 2);
 }
 
 BOOST_AUTO_TEST_CASE(test_root_not_primed_and_no_response) {
   std::unique_ptr<SyncRes> sr;
   init();
   initSR(sr, true, false);
-
-  t_RC->doWipeCache(g_rootdnsname, true);
+  std::set<ComboAddress> downServers;
 
   /* we are not primed yet, so SyncRes will have to call primeHints()
      then call getRootNS(), for which at least one of the root servers needs to answer.
      None will, so it should ServFail.
   */
+  sr->setAsyncCallback([&downServers](const ComboAddress& ip, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, int EDNS0Level, struct timeval* now, boost::optional<Netmask>& srcmask, boost::optional<const ResolveContext&> context, std::shared_ptr<RemoteLogger> outgoingLogger, LWResult* res) {
+
+      downServers.insert(ip);
+      return 0;
+    });
+
   vector<DNSRecord> ret;
   int res = sr->beginResolve(DNSName("."), QType(QType::NS), QClass::IN, ret);
   BOOST_CHECK_EQUAL(res, 2);
+  BOOST_CHECK_EQUAL(ret.size(), 0);
+  BOOST_CHECK(downServers.size() > 0);
+  /* we explicitly refuse to mark the root servers down */
+  for (const auto& server : downServers) {
+    BOOST_CHECK_EQUAL(t_sstorage->fails.value(server), 0);
+  }
 }
 
 BOOST_AUTO_TEST_CASE(test_edns_formerr_fallback) {
@@ -218,11 +244,21 @@ BOOST_AUTO_TEST_CASE(test_edns_formerr_fallback) {
   init();
   initSR(sr, true, false);
 
-  sr->setAsyncCallback([](const ComboAddress& ip, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, int EDNS0Level, struct timeval* now, boost::optional<Netmask>& srcmask, boost::optional<const ResolveContext&> context, std::shared_ptr<RemoteLogger> outgoingLogger, LWResult* res) {
+  ComboAddress noEDNSServer;
+  size_t queriesWithEDNS = 0;
+  size_t queriesWithoutEDNS = 0;
+
+  sr->setAsyncCallback([&queriesWithEDNS, &queriesWithoutEDNS, &noEDNSServer](const ComboAddress& ip, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, int EDNS0Level, struct timeval* now, boost::optional<Netmask>& srcmask, boost::optional<const ResolveContext&> context, std::shared_ptr<RemoteLogger> outgoingLogger, LWResult* res) {
       if (EDNS0Level != 0) {
+        queriesWithEDNS++;
+        noEDNSServer = ip;
+
         res->d_rcode = RCode::FormErr;
         return 1;
       }
+
+      queriesWithoutEDNS++;
+
       if (domain == DNSName("powerdns.com") && type == QType::A && !doTCP) {
         res->d_rcode = 0;
         res->d_aabit = true;
@@ -241,13 +277,17 @@ BOOST_AUTO_TEST_CASE(test_edns_formerr_fallback) {
       return 0;
     });
 
-  t_RC->doWipeCache(g_rootdnsname, true);
   primeHints();
 
-  /* fake that the root NS doesn't handle EDNS, chceck that we fallback */
+  /* fake that the root NS doesn't handle EDNS, check that we fallback */
   vector<DNSRecord> ret;
   int res = sr->beginResolve(DNSName("powerdns.com."), QType(QType::A), QClass::IN, ret);
   BOOST_CHECK_EQUAL(res, 0);
+  BOOST_CHECK_EQUAL(ret.size(), 1);
+  BOOST_CHECK_EQUAL(queriesWithEDNS, 1);
+  BOOST_CHECK_EQUAL(queriesWithoutEDNS, 1);
+  BOOST_CHECK_EQUAL(t_sstorage->ednsstatus.size(), 1);
+  BOOST_CHECK_EQUAL(t_sstorage->ednsstatus[noEDNSServer].mode, SyncRes::EDNSStatus::NOEDNS);
 }
 
 BOOST_AUTO_TEST_CASE(test_edns_notimpl_fallback) {
@@ -255,11 +295,18 @@ BOOST_AUTO_TEST_CASE(test_edns_notimpl_fallback) {
   init();
   initSR(sr, true, false);
 
-  sr->setAsyncCallback([](const ComboAddress& ip, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, int EDNS0Level, struct timeval* now, boost::optional<Netmask>& srcmask, boost::optional<const ResolveContext&> context, std::shared_ptr<RemoteLogger> outgoingLogger, LWResult* res) {
+  size_t queriesWithEDNS = 0;
+  size_t queriesWithoutEDNS = 0;
+
+  sr->setAsyncCallback([&queriesWithEDNS, &queriesWithoutEDNS](const ComboAddress& ip, const DNSName& domain, int type, bool doTCP, bool sendRDQuery, int EDNS0Level, struct timeval* now, boost::optional<Netmask>& srcmask, boost::optional<const ResolveContext&> context, std::shared_ptr<RemoteLogger> outgoingLogger, LWResult* res) {
       if (EDNS0Level != 0) {
+        queriesWithEDNS++;
         res->d_rcode = RCode::NotImp;
         return 1;
       }
+
+      queriesWithoutEDNS++;
+
       if (domain == DNSName("powerdns.com") && type == QType::A && !doTCP) {
         res->d_rcode = 0;
         res->d_aabit = true;
@@ -278,13 +325,15 @@ BOOST_AUTO_TEST_CASE(test_edns_notimpl_fallback) {
       return 0;
     });
 
-  t_RC->doWipeCache(g_rootdnsname, true);
   primeHints();
 
   /* fake that the NS doesn't handle EDNS, check that we fallback */
   vector<DNSRecord> ret;
   int res = sr->beginResolve(DNSName("powerdns.com."), QType(QType::A), QClass::IN, ret);
   BOOST_CHECK_EQUAL(res, 0);
+  BOOST_CHECK_EQUAL(ret.size(), 1);
+  BOOST_CHECK_EQUAL(queriesWithEDNS, 1);
+  BOOST_CHECK_EQUAL(queriesWithoutEDNS, 1);
 }
 
 BOOST_AUTO_TEST_CASE(test_tc_fallback_to_tcp) {
@@ -317,7 +366,6 @@ BOOST_AUTO_TEST_CASE(test_tc_fallback_to_tcp) {
       return 0;
     });
 
-  t_RC->doWipeCache(g_rootdnsname, true);
   primeHints();
 
   /* fake that the NS truncates every request over UDP, we should fallback to TCP */
@@ -325,5 +373,49 @@ BOOST_AUTO_TEST_CASE(test_tc_fallback_to_tcp) {
   int res = sr->beginResolve(DNSName("powerdns.com."), QType(QType::A), QClass::IN, ret);
   BOOST_CHECK_EQUAL(res, 0);
 }
+
+#warning TODO: check RPZ (nameservers name blocked, name server IP blocked)
+
+#warning check that wantsRPZ false skip the RPZ checks
+
+#warning check that we are asking the more specific nameservers
+
+#warning check that we correctly ignore unauth data?
+
+#warning check out of band support
+
+#warning check throttled
+
+#warning check blocked
+
+#warning check we query the fastest auth available first?
+
+#warning check we correctly store failed servers -other than the roots ..
+
+#warning check we correctly store slow servers
+
+#warning check EDNS subnetmask
+
+#warning if possible, check preoutquery
+
+#warning check depth limit
+
+#warning check time limit
+
+#warning check we correctly populate the cache from the results
+
+#warning check we correctly populate the negcache
+
+#warning check we honor s_minimumTTL and s_maxcachettl
+
+#warning check we follow a CNAME
+
+#warning check we follow a CNAME, but not a loop!
+
+#warning check we follow referral
+
+#warning check delegation only
+
+#warning check root NX trust
 
 BOOST_AUTO_TEST_SUITE_END()

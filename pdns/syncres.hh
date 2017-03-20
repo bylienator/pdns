@@ -133,9 +133,14 @@ public:
       d_cont[t]=e;
   }
 
-  unsigned int size()
+  unsigned int size() const
   {
     return (unsigned int)d_cont.size();
+  }
+
+  void clear()
+  {
+    d_cont.clear();
   }
 private:
   unsigned int d_limit;
@@ -208,7 +213,7 @@ public:
     return d_val*=factor;
   }
 
-  double peek(void)
+  double peek(void) const
   {
     return d_val;
   }
@@ -231,9 +236,9 @@ public:
   Counters()
   {
   }
-  unsigned long value(const Thing& t)
+  unsigned long value(const Thing& t) const
   {
-    typename cont_t::iterator i=d_cont.find(t);
+    typename cont_t::const_iterator i=d_cont.find(t);
 
     if(i==d_cont.end()) {
       return 0;
@@ -272,7 +277,11 @@ public:
       d_cont.erase(i);
     }
   }
-  size_t size()
+  void clear()
+  {
+    d_cont.clear();
+  }
+  size_t size() const
   {
     return d_cont.size();
   }
@@ -721,7 +730,7 @@ public:
   TCPConnection(int fd, const ComboAddress& addr);
   ~TCPConnection();
 
-  int getFD()
+  int getFD() const
   {
     return d_fd;
   }

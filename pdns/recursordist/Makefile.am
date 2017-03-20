@@ -205,6 +205,7 @@ testrunner_SOURCES = \
 	recpacketcache.cc recpacketcache.hh \
 	recursor_cache.cc recursor_cache.hh \
 	responsestats.cc \
+	root-dnssec.hh \
 	sillyrecords.cc \
 	sholder.hh \
 	sstuff.hh \
