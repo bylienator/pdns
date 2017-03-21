@@ -210,14 +210,7 @@ testrunner_SOURCES = \
 	sholder.hh \
 	sstuff.hh \
 	syncres.cc syncres.hh \
-	test-syncres_cc.cc \
-	testrunner.cc \
-	unix_utility.cc \
-	validate.cc validate.hh \
-	validate-recursor.cc validate-recursor.hh \
-	zoneparser-tng.cc zoneparser-tng.hh
-
-#	test-arguments_cc.cc \
+	test-arguments_cc.cc \
 	test-base32_cc.cc \
 	test-base64_cc.cc \
 	test-dnsrecordcontent.cc \
@@ -230,7 +223,13 @@ testrunner_SOURCES = \
 	test-nmtree.cc \
 	test-rcpgenerator_cc.cc \
 	test-recpacketcache_cc.cc \
-	test-tsig.cc
+	test-syncres_cc.cc \
+	test-tsig.cc \
+	testrunner.cc \
+	unix_utility.cc \
+	validate.cc validate.hh \
+	validate-recursor.cc validate-recursor.hh \
+	zoneparser-tng.cc zoneparser-tng.hh
 
 testrunner_LDFLAGS = \
 	$(AM_LDFLAGS) \
