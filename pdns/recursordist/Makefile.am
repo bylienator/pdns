@@ -91,7 +91,6 @@ pdns_recursor_SOURCES = \
 	dnssecinfra.hh dnssecinfra.cc \
 	dnsseckeeper.hh \
 	dnswriter.cc dnswriter.hh \
-	ecs.cc \
 	ednsoptions.cc ednsoptions.hh \
 	ednssubnet.cc ednssubnet.hh \
 	filterpo.cc filterpo.hh \
@@ -185,7 +184,6 @@ testrunner_SOURCES = \
 	dnsrecords.cc \
 	dnssecinfra.cc \
 	dnswriter.cc dnswriter.hh \
-	ecs.cc \
 	ednsoptions.cc ednsoptions.hh \
 	ednssubnet.cc ednssubnet.hh \
 	filterpo.cc filterpo.hh \

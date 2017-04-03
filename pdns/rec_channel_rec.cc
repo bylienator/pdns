@@ -204,7 +204,7 @@ static uint64_t* pleaseDump(int fd)
 
 static uint64_t* pleaseDumpNSSpeeds(int fd)
 {
-  return new uint64_t(t_RC->doDumpNSSpeeds(fd));
+  return new uint64_t(SyncRes::doDumpNSSpeeds(fd));
 }
 
 template<typename T>
