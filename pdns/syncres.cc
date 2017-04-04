@@ -49,7 +49,11 @@
 #include "ednssubnet.hh"
 #include "cachecleaner.hh"
 #include "rec-lua-conf.hh"
-thread_local std::unique_ptr<SyncRes::StaticStorage> t_sstorage;
+thread_local SyncRes::StaticStorage SyncRes::t_sstorage;
+thread_local SyncRes::nsspeeds_t SyncRes::t_nsSpeeds;
+thread_local SyncRes::throttle_t SyncRes::t_throttle;
+thread_local SyncRes::ednsstatus_t SyncRes::t_ednsstatus;
+thread_local SyncRes::fails_t SyncRes::t_fails;
 
 unsigned int SyncRes::s_maxnegttl;
 unsigned int SyncRes::s_maxcachettl;
@@ -121,9 +125,6 @@ SyncRes::SyncRes(const struct timeval& now) :  d_outqueries(0), d_tcpoutqueries(
 					       d_cacheonly(false), d_nocache(false), d_doDNSSEC(false), d_doEDNS0(false), d_lm(s_lm)
                                                  
 { 
-  if(!t_sstorage) {
-    t_sstorage = std::unique_ptr<StaticStorage>(new StaticStorage());
-  }
 }
 
 /** everything begins here - this is the entry point just after receiving a packet */
@@ -230,7 +231,7 @@ bool SyncRes::doOOBResolve(const DNSName &qname, const QType &qtype, vector<DNSR
   DNSName authdomain(qname);
 
   domainmap_t::const_iterator iter=getBestAuthZone(&authdomain);
-  if(iter==t_sstorage->domainmap->end()) {
+  if(iter==t_sstorage.domainmap->end()) {
     LOG(prefix<<qname<<": auth storage has no zone for this query!"<<endl);
     return false;
   }
@@ -332,7 +333,7 @@ void SyncRes::doEDNSDumpAndClose(int fd)
     return;
   }
   fprintf(fp,"IP Address\tMode\tMode last updated at\n");
-  for(const auto& eds : t_sstorage->ednsstatus) {
+  for(const auto& eds : t_ednsstatus) {
     fprintf(fp, "%s\t%d\t%s", eds.first.toString().c_str(), (int)eds.second.mode, ctime(&eds.second.modeSetAt));
   }
 
@@ -347,7 +348,7 @@ uint64_t SyncRes::doDumpNSSpeeds(int fd)
   fprintf(fp, "; nsspeed dump from thread follows\n;\n");
   uint64_t count=0;
 
-  for(const auto& i : t_sstorage->nsSpeeds)
+  for(const auto& i : t_nsSpeeds)
   {
     count++;
     fprintf(fp, "%s -> ", i.first.toString().c_str());
@@ -406,7 +407,7 @@ int SyncRes::asyncresolveWrapper(const ComboAddress& ip, bool ednsMANDATORY, con
   */
 
   SyncRes::EDNSStatus* ednsstatus;
-  ednsstatus = &t_sstorage->ednsstatus[ip]; // does this include port? YES
+  ednsstatus = &t_ednsstatus[ip]; // does this include port? YES
 
   if(ednsstatus->modeSetAt && ednsstatus->modeSetAt + 3600 < d_now.tv_sec) {
     *ednsstatus=SyncRes::EDNSStatus();
@@ -503,7 +504,7 @@ int SyncRes::doResolve(const DNSName &qname, const QType &qtype, vector<DNSRecor
       LOG(prefix<<qname<<": Recursion not requested for '"<<qname<<"|"<<qtype.getName()<<"', peeking at auth/forward zones"<<endl);
       DNSName authname(qname);
       domainmap_t::const_iterator iter=getBestAuthZone(&authname);
-      if(iter != t_sstorage->domainmap->end()) {
+      if(iter != t_sstorage.domainmap->end()) {
         const vector<ComboAddress>& servers = iter->second.d_servers;
         if(servers.empty()) {
           ret.clear();
@@ -635,9 +636,9 @@ vector<ComboAddress> SyncRes::getAddrs(const DNSName &qname, unsigned int depth,
     random_shuffle(ret.begin(), ret.end(), dns_random);
 
     // move 'best' address for this nameserver name up front
-    nsspeeds_t::iterator best = t_sstorage->nsSpeeds.find(qname);
+    nsspeeds_t::iterator best = t_nsSpeeds.find(qname);
 
-    if(best != t_sstorage->nsSpeeds.end())
+    if(best != t_nsSpeeds.end())
       for(ret_t::iterator i=ret.begin(); i != ret.end(); ++i) {
         if(*i==best->second.d_best) {  // got the fastest one
           if(i!=ret.begin()) {
@@ -732,8 +733,8 @@ SyncRes::domainmap_t::const_iterator SyncRes::getBestAuthZone(DNSName* qname) co
 {
   SyncRes::domainmap_t::const_iterator ret;
   do {
-    ret=t_sstorage->domainmap->find(*qname);
-    if(ret!=t_sstorage->domainmap->end())
+    ret=t_sstorage.domainmap->find(*qname);
+    if(ret!=t_sstorage.domainmap->end())
       break;
   }while(qname->chopOff());
   return ret;
@@ -746,7 +747,7 @@ DNSName SyncRes::getBestNSNamesFromCache(const DNSName &qname, const QType& qtyp
   DNSName authdomain(qname);
 
   domainmap_t::const_iterator iter=getBestAuthZone(&authdomain);
-  if(iter!=t_sstorage->domainmap->end()) {
+  if(iter!=t_sstorage.domainmap->end()) {
     if( iter->second.d_servers.empty() )
       // this gets picked up in doResolveAt, the empty DNSName, combined with the
       // empty vector means 'we are auth for this zone'
@@ -850,10 +851,10 @@ bool SyncRes::doCacheCheck(const DNSName &qname, const QType &qtype, vector<DNSR
   QType qtnull(0);
 
   DNSName authname(qname);
-  bool wasForwardedOrAuth = (getBestAuthZone(&authname) != t_sstorage->domainmap->end());
+  bool wasForwardedOrAuth = (getBestAuthZone(&authname) != t_sstorage.domainmap->end());
 
   if(s_rootNXTrust &&
-     (range.first=t_sstorage->negcache.find(tie(getLastLabel(qname), qtnull))) != t_sstorage->negcache.end() &&
+     (range.first=t_sstorage.negcache.find(tie(getLastLabel(qname), qtnull))) != t_sstorage.negcache.end() &&
       !(wasForwardedOrAuth && !authname.isRoot()) && // when forwarding, the root may only neg-cache if it was forwarded to.
       range.first->d_qname.isRoot() && (uint32_t)d_now.tv_sec < range.first->d_ttd) {
     sttl=range.first->d_ttd - d_now.tv_sec;
@@ -862,12 +863,12 @@ bool SyncRes::doCacheCheck(const DNSName &qname, const QType &qtype, vector<DNSR
     res = RCode::NXDomain;
     sqname=range.first->d_qname;
     sqt=QType::SOA;
-    moveCacheItemToBack(t_sstorage->negcache, range.first);
+    moveCacheItemToBack(t_sstorage.negcache, range.first);
 
     giveNegative=true;
   }
   else {
-    range=t_sstorage->negcache.equal_range(tie(qname));
+    range=t_sstorage.negcache.equal_range(tie(qname));
     negcache_t::iterator ni;
     for(ni=range.first; ni != range.second; ni++) {
       // we have something
@@ -895,12 +896,12 @@ bool SyncRes::doCacheCheck(const DNSName &qname, const QType &qtype, vector<DNSR
                 ret.push_back(rec);
             }
           }
-	  moveCacheItemToBack(t_sstorage->negcache, ni);
+	  moveCacheItemToBack(t_sstorage.negcache, ni);
 	  break;
 	}
 	else {
 	  LOG(prefix<<qname<<": Entire name '"<<qname<<"' or type was negatively cached, but entry expired"<<endl);
-	  moveCacheItemToFront(t_sstorage->negcache, ni);
+	  moveCacheItemToFront(t_sstorage.negcache, ni);
 	}
       }
     }
@@ -980,7 +981,7 @@ inline vector<DNSName> SyncRes::shuffleInSpeedOrder(NsSet &tnameservers, const s
 
   for(const auto& val: rnameservers) {
     double speed;
-    speed=t_sstorage->nsSpeeds[val].get(&d_now);
+    speed=t_nsSpeeds[val].get(&d_now);
     speeds[val]=speed;
   }
   random_shuffle(rnameservers.begin(),rnameservers.end(), dns_random);
@@ -1102,12 +1103,12 @@ vector<ComboAddress> SyncRes::retrieveAddressesForNS(const std::string& prefix, 
 
 bool SyncRes::throttledOrBlocked(const std::string& prefix, const ComboAddress& remoteIP, const DNSName& qname, const QType& qtype, bool pierceDontQuery)
 {
-  if(t_sstorage->throttle.shouldThrottle(d_now.tv_sec, boost::make_tuple(remoteIP, "", 0))) {
+  if(t_throttle.shouldThrottle(d_now.tv_sec, boost::make_tuple(remoteIP, "", 0))) {
     LOG(prefix<<qname<<": server throttled "<<endl);
     s_throttledqueries++; d_throttledqueries++;
     return true;
   }
-  else if(t_sstorage->throttle.shouldThrottle(d_now.tv_sec, boost::make_tuple(remoteIP, qname, qtype.getCode()))) {
+  else if(t_throttle.shouldThrottle(d_now.tv_sec, boost::make_tuple(remoteIP, qname, qtype.getCode()))) {
     LOG(prefix<<qname<<": query throttled "<<endl);
     s_throttledqueries++; d_throttledqueries++;
     return true;
@@ -1172,11 +1173,11 @@ RCode::rcodes_ SyncRes::updateCacheFromRecords(const std::string& prefix, LWResu
       }
       else {
         bool haveLogged = false;
-        if (!t_sstorage->domainmap->empty()) {
+        if (!t_sstorage.domainmap->empty()) {
           // Check if we are authoritative for a zone in this answer
           DNSName tmp_qname(rec.d_name);
           auto auth_domain_iter=getBestAuthZone(&tmp_qname);
-          if(auth_domain_iter!=t_sstorage->domainmap->end() &&
+          if(auth_domain_iter!=t_sstorage.domainmap->end() &&
              auth.countLabels() <= auth_domain_iter->first.countLabels()) {
             if (auth_domain_iter->first != auth) {
               LOG("NO! - we are authoritative for the zone "<<auth_domain_iter->first<<endl);
@@ -1256,10 +1257,10 @@ bool SyncRes::processRecords(const std::string& prefix, const DNSName& qname, co
         ne.d_name=qname;
         ne.d_qtype=QType(0); // this encodes 'whole record'
         ne.d_dnssecProof = harvestRecords(lwr.d_records, {QType::NSEC, QType::NSEC3});
-        replacing_insert(t_sstorage->negcache, ne);
+        replacing_insert(t_sstorage.negcache, ne);
         if(s_rootNXTrust && auth.isRoot()) { // We should check if it was forwarded here, see issue #5107
           ne.d_name = getLastLabel(ne.d_name);
-          replacing_insert(t_sstorage->negcache, ne);
+          replacing_insert(t_sstorage.negcache, ne);
         }
       }
 
@@ -1322,7 +1323,7 @@ bool SyncRes::processRecords(const std::string& prefix, const DNSName& qname, co
           ne.d_qtype=qtype;
           ne.d_dnssecProof = harvestRecords(lwr.d_records, {QType::NSEC, QType::NSEC3});
           if(qtype.getCode()) {  // prevents us from blacking out a whole domain
-            replacing_insert(t_sstorage->negcache, ne);
+            replacing_insert(t_sstorage.negcache, ne);
           }
         }
         negindic=true;
@@ -1475,16 +1476,16 @@ int SyncRes::doResolveAt(NsSet &nameservers, DNSName auth, bool flawedNSSet, con
               }
 
               if(resolveret!=-2) { // don't account for resource limits, they are our own fault
-		t_sstorage->nsSpeeds[*tns].submit(*remoteIP, 1000000, &d_now); // 1 sec
+		t_nsSpeeds[*tns].submit(*remoteIP, 1000000, &d_now); // 1 sec
 
 		// code below makes sure we don't filter COM or the root
-                if (s_serverdownmaxfails > 0 && (auth != g_rootdnsname) && t_sstorage->fails.incr(*remoteIP) >= s_serverdownmaxfails) {
+                if (s_serverdownmaxfails > 0 && (auth != g_rootdnsname) && t_fails.incr(*remoteIP) >= s_serverdownmaxfails) {
                   LOG(prefix<<qname<<": Max fails reached resolving on "<< remoteIP->toString() <<". Going full throttle for "<< s_serverdownthrottletime <<" seconds" <<endl);
-                  t_sstorage->throttle.throttle(d_now.tv_sec, boost::make_tuple(*remoteIP, "", 0), s_serverdownthrottletime, 10000); // mark server as down
+                  t_throttle.throttle(d_now.tv_sec, boost::make_tuple(*remoteIP, "", 0), s_serverdownthrottletime, 10000); // mark server as down
                 } else if(resolveret==-1)
-                  t_sstorage->throttle.throttle(d_now.tv_sec, boost::make_tuple(*remoteIP, qname, qtype.getCode()), 60, 100); // unreachable, 1 minute or 100 queries
+                  t_throttle.throttle(d_now.tv_sec, boost::make_tuple(*remoteIP, qname, qtype.getCode()), 60, 100); // unreachable, 1 minute or 100 queries
                 else
-                  t_sstorage->throttle.throttle(d_now.tv_sec, boost::make_tuple(*remoteIP, qname, qtype.getCode()), 10, 5);  // timeout
+                  t_throttle.throttle(d_now.tv_sec, boost::make_tuple(*remoteIP, qname, qtype.getCode()), 10, 5);  // timeout
               }
               continue;
             }
@@ -1493,17 +1494,17 @@ int SyncRes::doResolveAt(NsSet &nameservers, DNSName auth, bool flawedNSSet, con
 
             if(lwr.d_rcode==RCode::ServFail || lwr.d_rcode==RCode::Refused) {
               LOG(prefix<<qname<<": "<<*tns<<" ("<<remoteIP->toString()<<") returned a "<< (lwr.d_rcode==RCode::ServFail ? "ServFail" : "Refused") << ", trying sibling IP or NS"<<endl);
-              t_sstorage->throttle.throttle(d_now.tv_sec,boost::make_tuple(*remoteIP, qname, qtype.getCode()),60,3); // servfail or refused
+              t_throttle.throttle(d_now.tv_sec,boost::make_tuple(*remoteIP, qname, qtype.getCode()),60,3); // servfail or refused
               continue;
             }
 
             if(s_serverdownmaxfails > 0)
-              t_sstorage->fails.clear(*remoteIP);
+              t_fails.clear(*remoteIP);
 
             break;  // this IP address worked!
           wasLame:; // well, it didn't
             LOG(prefix<<qname<<": status=NS "<<*tns<<" ("<< remoteIP->toString() <<") is lame for '"<<auth<<"', trying sibling IP or NS"<<endl);
-            t_sstorage->throttle.throttle(d_now.tv_sec, boost::make_tuple(*remoteIP, qname, qtype.getCode()), 60, 100); // lame
+            t_throttle.throttle(d_now.tv_sec, boost::make_tuple(*remoteIP, qname, qtype.getCode()), 60, 100); // lame
           }
         }
 
@@ -1527,7 +1528,7 @@ int SyncRes::doResolveAt(NsSet &nameservers, DNSName auth, bool flawedNSSet, con
         */
         //        cout<<"msec: "<<lwr.d_usec/1000.0<<", "<<g_avgLatency/1000.0<<'\n';
 
-        t_sstorage->nsSpeeds[*tns].submit(*remoteIP, lwr.d_usec, &d_now);
+        t_nsSpeeds[*tns].submit(*remoteIP, lwr.d_usec, &d_now);
       }
 
       if(s_minimumTTL) {
@@ -1586,8 +1587,8 @@ int SyncRes::doResolveAt(NsSet &nameservers, DNSName auth, bool flawedNSSet, con
       else if(realreferral) {
         LOG(prefix<<qname<<": status=did not resolve, got "<<(unsigned int)nsset.size()<<" NS, ");
 	if(sawDS) {
-	  t_sstorage->dnssecmap[newauth]=true;
-	  /*	  for(const auto& e : t_sstorage->dnssecmap)
+	  //s_dnssecmap[newauth]=true;
+	  /*	  for(const auto& e : s_dnssecmap)
 	    cout<<e.first<<' ';
 	    cout<<endl;*/
 	}
