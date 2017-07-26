@@ -1438,4 +1438,19 @@ void moreLua(bool client)
         setLuaSideEffect();
         g_downstreamTCPCleanupInterval = interval;
       });
+
+    g_lua.writeFunction("setUDPMultipleMessagesVectorSize", [](size_t vSize) {
+        if (g_configurationDone) {
+          errlog("setUDPMultipleMessagesVectorSize() cannot be used at runtime!");
+          g_outputBuffer="setUDPMultipleMessagesVectorSize() cannot be used at runtime!\n";
+          return;
+        }
+#if defined(HAVE_RECVMMSG) && defined(HAVE_SENDMMSG) && defined(MSG_WAITFORONE)
+        setLuaSideEffect();
+        g_udpVectorSize = vSize;
+#else
+        errlog("recvmmsg() support is not available!");
+        g_outputBuffer="recvmmsg support is not available!\n";
+#endif
+      });
 }
