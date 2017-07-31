@@ -9,13 +9,52 @@ bool g_dnssecLOG{false};
 uint16_t g_maxNSEC3Iterations{0};
 
 #define LOG(x) if(g_dnssecLOG) { L <<Logger::Warning << x; }
-void dotEdge(DNSName zone, string type1, DNSName name1, string tag1, string type2, DNSName name2, string tag2, string color="");
-void dotNode(string type, DNSName name, string tag, string content);
-string dotName(string type, DNSName name, string tag);
-string dotEscape(string name);
 
 const char *dStates[]={"nodata", "nxdomain", "nxqtype", "empty non-terminal", "insecure", "opt-out"};
 const char *vStates[]={"Indeterminate", "Bogus", "Insecure", "Secure", "NTA", "TA"};
+
+#ifdef GRAPHVIZ
+static string dotEscape(const string& name)
+{
+  return "\"" + boost::replace_all_copy(name, "\"", "\\\"") + "\"";
+}
+
+static string dotName(const string& type, const DNSName& name, const string& tag)
+{
+  if(tag == "")
+    return type+" "+name.toString();
+  else
+    return type+" "+name.toString()+"/"+tag;
+}
+
+static void dotNode(const string& type, const DNSName& name, const string& tag, const string& content)
+{
+  cout<<"    "
+      <<dotEscape(dotName(type, name, tag))
+      <<" [ label="<<dotEscape(dotName(type, name, tag)+"\\n"+content)<<" ];"<<endl;
+}
+
+static void dotEdge(const DNSName& zone, const string& type1, const DNSName& name1, const string& tag1, const string& type2, const DNSName& name2, const string& tag2, const string& color)
+{
+  cout<<"    ";
+  if(zone != g_rootdnsname) cout<<"subgraph "<<dotEscape("cluster "+zone.toString())<<" { ";
+  cout<<dotEscape(dotName(type1, name1, tag1))
+      <<" -> "
+      <<dotEscape(dotName(type2, name2, tag2));
+  if(color != "") cout<<" [ color=\""<<color<<"\" ]; ";
+  else cout<<"; ";
+  if(zone != g_rootdnsname) cout<<"label = "<<dotEscape("zone: "+zone.toString())<<";"<<"}";
+  cout<<endl;
+}
+#else
+static void dotNode(const string& type, const DNSName& name, const string& tag, const string& content)
+{
+}
+
+static void dotEdge(const DNSName& zone, const string& type1, const DNSName& name1, const string& tag1, const string& type2, const DNSName& name2, const string& tag2, const string& color)
+{
+}
+#endif
 
 static vector<shared_ptr<DNSKEYRecordContent > > getByTag(const skeyset_t& keys, uint16_t tag, uint8_t algorithm)
 {
@@ -649,40 +688,3 @@ DNSName getSigner(const std::vector<std::shared_ptr<RRSIGRecordContent> >& signa
 
   return DNSName();
 }
-
-string dotEscape(string name)
-{
-  return "\"" + boost::replace_all_copy(name, "\"", "\\\"") + "\"";
-}
-
-string dotName(string type, DNSName name, string tag)
-{
-  if(tag == "")
-    return type+" "+name.toString();
-  else
-    return type+" "+name.toString()+"/"+tag;
-}
-void dotNode(string type, DNSName name, string tag, string content)
-{
-#ifdef GRAPHVIZ
-  cout<<"    "
-      <<dotEscape(dotName(type, name, tag))
-      <<" [ label="<<dotEscape(dotName(type, name, tag)+"\\n"+content)<<" ];"<<endl;
-#endif
-}
-
-void dotEdge(DNSName zone, string type1, DNSName name1, string tag1, string type2, DNSName name2, string tag2, string color)
-{
-#ifdef GRAPHVIZ
-  cout<<"    ";
-  if(zone != g_rootdnsname) cout<<"subgraph "<<dotEscape("cluster "+zone.toString())<<" { ";
-  cout<<dotEscape(dotName(type1, name1, tag1))
-      <<" -> "
-      <<dotEscape(dotName(type2, name2, tag2));
-  if(color != "") cout<<" [ color=\""<<color<<"\" ]; ";
-  else cout<<"; ";
-  if(zone != g_rootdnsname) cout<<"label = "<<dotEscape("zone: "+zone.toString())<<";"<<"}";
-  cout<<endl;
-#endif
-}
-

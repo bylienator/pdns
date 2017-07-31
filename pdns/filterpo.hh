@@ -110,11 +110,11 @@ public:
     void addNSIPTrigger(const Netmask& nm, Policy pol);
     void addResponseTrigger(const Netmask& nm, Policy pol);
 
-    bool rmClientTrigger(const Netmask& nm, Policy pol);
-    bool rmQNameTrigger(const DNSName& nm, Policy pol);
-    bool rmNSTrigger(const DNSName& dn, Policy pol);
-    bool rmNSIPTrigger(const Netmask& nm, Policy pol);
-    bool rmResponseTrigger(const Netmask& nm, Policy pol);
+    bool rmClientTrigger(const Netmask& nm, const Policy& pol);
+    bool rmQNameTrigger(const DNSName& nm, const Policy& pol);
+    bool rmNSTrigger(const DNSName& dn, const Policy& pol);
+    bool rmNSIPTrigger(const Netmask& nm, const Policy& pol);
+    bool rmResponseTrigger(const Netmask& nm, const Policy& pol);
 
     std::unordered_map<DNSName, Policy> d_qpolName;   // QNAME trigger (RPZ)
     NetmaskTree<Policy> d_qpolAddr;         // Source address

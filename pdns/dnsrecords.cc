@@ -252,9 +252,8 @@ boilerplate_conv(SRV, QType::SRV,
                  )
 
 SOARecordContent::SOARecordContent(const DNSName& mname, const DNSName& rname, const struct soatimes& st) 
-: d_mname(mname), d_rname(rname)
+: d_st(st), d_mname(mname), d_rname(rname)
 {
-  d_st=st;
 }
 
 boilerplate_conv(SOA, QType::SOA, 
