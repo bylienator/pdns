@@ -590,7 +590,7 @@ void moreLua(bool client)
 #endif
     });
 
-  g_lua.writeFunction("getDNSCryptBind", [client](size_t idx) {
+  g_lua.writeFunction("getDNSCryptBind", [](size_t idx) {
       setLuaNoSideEffect();
 #ifdef HAVE_DNSCRYPT
       DnsCryptContext* ret = nullptr;
@@ -762,7 +762,7 @@ void moreLua(bool client)
         }
     });
 
-    g_lua.writeFunction("newPacketCache", [client](size_t maxEntries, boost::optional<uint32_t> maxTTL, boost::optional<uint32_t> minTTL, boost::optional<uint32_t> tempFailTTL, boost::optional<uint32_t> staleTTL, boost::optional<bool> dontAge) {
+    g_lua.writeFunction("newPacketCache", [](size_t maxEntries, boost::optional<uint32_t> maxTTL, boost::optional<uint32_t> minTTL, boost::optional<uint32_t> tempFailTTL, boost::optional<uint32_t> staleTTL, boost::optional<bool> dontAge) {
         return std::make_shared<DNSDistPacketCache>(maxEntries, maxTTL ? *maxTTL : 86400, minTTL ? *minTTL : 0, tempFailTTL ? *tempFailTTL : 60, staleTTL ? *staleTTL : 60, dontAge ? *dontAge : false);
       });
     g_lua.registerFunction("toString", &DNSDistPacketCache::toString);
@@ -873,7 +873,7 @@ void moreLua(bool client)
         message.setResponder(str);
       });
 
-    g_lua.writeFunction("newRemoteLogger", [client](const std::string& remote, boost::optional<uint16_t> timeout, boost::optional<uint64_t> maxQueuedEntries, boost::optional<uint8_t> reconnectWaitTime) {
+    g_lua.writeFunction("newRemoteLogger", [](const std::string& remote, boost::optional<uint16_t> timeout, boost::optional<uint64_t> maxQueuedEntries, boost::optional<uint8_t> reconnectWaitTime) {
         return std::make_shared<RemoteLogger>(ComboAddress(remote), timeout ? *timeout : 2, maxQueuedEntries ? *maxQueuedEntries : 100, reconnectWaitTime ? *reconnectWaitTime : 1);
       });
 
