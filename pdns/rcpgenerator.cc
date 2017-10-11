@@ -232,13 +232,13 @@ static bool isbase64(char c, bool acceptspace)
 
 void RecordTextReader::xfrBlobNoSpaces(string& val, int len) {
   skipSpaces();
-  int pos=(int)d_pos;
+  string::size_type pos=d_pos;
   const char* strptr=d_string.c_str();
   while(d_pos < d_end && isbase64(strptr[d_pos], false)) 
     d_pos++;
 
   string tmp;
-  tmp.assign(d_string.c_str()+pos, d_string.c_str() + d_pos);
+  tmp.assign(d_string, pos, d_pos - pos);
   boost::erase_all(tmp," ");
   val.clear();
   B64Decode(tmp, val);
@@ -250,13 +250,13 @@ void RecordTextReader::xfrBlobNoSpaces(string& val, int len) {
 void RecordTextReader::xfrBlob(string& val, int)
 {
   skipSpaces();
-  int pos=(int)d_pos;
+  string::size_type pos=d_pos;
   const char* strptr=d_string.c_str();
   while(d_pos < d_end && isbase64(strptr[d_pos], true))
     d_pos++;
   
   string tmp;
-  tmp.assign(d_string.c_str()+pos, d_string.c_str() + d_pos);
+  tmp.assign(d_string, pos, d_pos - pos);
   boost::erase_all(tmp," ");
   val.clear();
   B64Decode(tmp, val);
@@ -306,7 +306,7 @@ void HEXDecode(const char* begin, const char* end, string& out)
 void RecordTextReader::xfrHexBlob(string& val, bool keepReading)
 {
   skipSpaces();
-  int pos=(int)d_pos;
+  string::size_type pos=d_pos;
   while(d_pos < d_end && (keepReading || !dns_isspace(d_string[d_pos])))
     d_pos++;
 
@@ -316,11 +316,11 @@ void RecordTextReader::xfrHexBlob(string& val, bool keepReading)
 void RecordTextReader::xfrBase32HexBlob(string& val)
 {
   skipSpaces();
-  int pos=(int)d_pos;
+  string::size_type pos=d_pos;
   while(d_pos < d_end && !dns_isspace(d_string[d_pos]))
     d_pos++;
 
-  val=fromBase32Hex(string(d_string.c_str()+pos, d_pos-pos));
+  val=fromBase32Hex(string(d_string, pos, d_pos-pos));
 }
 
 
@@ -338,18 +338,18 @@ void RecordTextReader::xfrText(string& val, bool multi, bool lenField)
   val.clear();
   val.reserve(d_end - d_pos);
 
-  while(d_pos != d_end) {
+  while(d_pos < d_end) {
     if(!val.empty())
       val.append(1, ' ');
 
     skipSpaces();
     if(d_string[d_pos]!='"') { // special case 'plenus' - without quotes
       string::size_type pos = d_pos;
-      while(pos != d_end && isalnum(d_string[pos]))
+      while(pos < d_end && isalnum(d_string[pos]))
         pos++;
       if(pos == d_end) {
         val.append(1, '"');
-        val.append(d_string.c_str() + d_pos, d_end - d_pos);
+        val.append(d_string, d_pos, d_end - d_pos);
         val.append(1, '"');
         d_pos = d_end;
         break;
@@ -358,7 +358,7 @@ void RecordTextReader::xfrText(string& val, bool multi, bool lenField)
     }
     val.append(1, '"');
     while(++d_pos < d_end && d_string[d_pos]!='"') {
-      if(d_string[d_pos]=='\\' && d_pos+1!=d_end) {
+      if(d_string[d_pos]=='\\' && d_pos+1 < d_end) {
         val.append(1, d_string[d_pos++]);
       }
       val.append(1, d_string[d_pos]);
@@ -381,7 +381,7 @@ void RecordTextReader::xfrUnquotedText(string& val, bool lenField)
     val.append(1, ' ');
 
   skipSpaces();
-  val.append(1, d_string[d_pos]);
+  val.append(1, d_string.at(d_pos));
   while(++d_pos < d_end && d_string[d_pos] != ' '){
     val.append(1, d_string[d_pos]);
   }
@@ -390,12 +390,12 @@ void RecordTextReader::xfrUnquotedText(string& val, bool lenField)
 void RecordTextReader::xfrType(uint16_t& val)
 {
   skipSpaces();
-  int pos=(int)d_pos;
+  string::size_type pos=d_pos;
   while(d_pos < d_end && !dns_isspace(d_string[d_pos]))
     d_pos++;
 
   string tmp;
-  tmp.assign(d_string.c_str()+pos, d_string.c_str() + d_pos);
+  tmp.assign(d_string, pos, d_pos - pos);
 
   val=DNSRecordContent::TypeToNumber(tmp);
 }
