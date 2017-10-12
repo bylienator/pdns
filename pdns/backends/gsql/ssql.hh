@@ -56,14 +56,14 @@ public:
   virtual SSqlStatement* bind(const string& name, uint32_t value)=0;
   virtual SSqlStatement* bind(const string& name, long value)=0;
   virtual SSqlStatement* bind(const string& name, unsigned long value)=0;
-  virtual SSqlStatement* bind(const string& name, long long value)=0;;
+  virtual SSqlStatement* bind(const string& name, long long value)=0;
   virtual SSqlStatement* bind(const string& name, unsigned long long value)=0;
   virtual SSqlStatement* bind(const string& name, const std::string& value)=0;
   SSqlStatement* bind(const string& name, const DNSName& value) {
     return bind(name, toLower(value.toStringRootDot()));
   }
   virtual SSqlStatement* bindNull(const string& name)=0;
-  virtual SSqlStatement* execute()=0;;
+  virtual SSqlStatement* execute()=0;
   virtual bool hasNextRow()=0;
   virtual SSqlStatement* nextRow(row_t& row)=0;
   virtual SSqlStatement* getResult(result_t& result)=0;
