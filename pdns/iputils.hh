@@ -568,6 +568,7 @@ public:
     // see above.
     for(auto const& node: rhs._nodes)
       insert(node->first).second = node->second;
+    d_cleanup_tree = rhs.d_cleanup_tree;
     return *this;
   }
 
