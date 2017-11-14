@@ -29,6 +29,7 @@
 #include <set>
 #include <unordered_set>
 #include <map>
+#include <unordered_map>
 #include <cmath>
 #include <iostream>
 #include <utility>
@@ -61,7 +62,7 @@
 
 class RecursorLua4;
 
-typedef map<
+typedef std::unordered_map<
   DNSName,
   pair<
     vector<ComboAddress>,
@@ -326,7 +327,7 @@ public:
     ComboAddress d_best;
   };
 
-  typedef map<DNSName, DecayingEwmaCollection> nsspeeds_t;
+  typedef std::unordered_map<DNSName, DecayingEwmaCollection> nsspeeds_t;
   typedef map<ComboAddress, EDNSStatus> ednsstatus_t;
 
   vState getDSRecords(const DNSName& zone, dsmap_t& ds, bool onlyTA, unsigned int depth, bool bogusOnNXD=true, bool* foundCut=nullptr);
@@ -374,7 +375,7 @@ public:
     void addSOA(std::vector<DNSRecord>& records) const;
   };
 
-  typedef map<DNSName, AuthDomain> domainmap_t;
+  typedef std::unordered_map<DNSName, AuthDomain> domainmap_t;
   typedef Throttle<boost::tuple<ComboAddress,DNSName,uint16_t> > throttle_t;
   typedef Counters<ComboAddress> fails_t;
 
@@ -717,7 +718,7 @@ private:
     }
   };
 
-  typedef std::map<DNSName,vState> zonesStates_t;
+  typedef std::unordered_map<DNSName,vState> zonesStates_t;
 
   int doResolveAt(NsSet &nameservers, DNSName auth, bool flawedNSSet, const DNSName &qname, const QType &qtype, vector<DNSRecord>&ret,
                   unsigned int depth, set<GetBestNSAnswer>&beenthere, vState& state);

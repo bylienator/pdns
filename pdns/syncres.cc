@@ -1215,12 +1215,12 @@ bool SyncRes::moreSpecificThan(const DNSName& a, const DNSName &b) const
 
 struct speedOrder
 {
-  speedOrder(map<DNSName,double> &speeds) : d_speeds(speeds) {}
+  speedOrder(std::unordered_map<DNSName,double> &speeds) : d_speeds(speeds) {}
   bool operator()(const DNSName &a, const DNSName &b) const
   {
     return d_speeds[a] < d_speeds[b];
   }
-  map<DNSName, double>& d_speeds;
+  std::unordered_map<DNSName, double>& d_speeds;
 };
 
 inline vector<DNSName> SyncRes::shuffleInSpeedOrder(NsSet &tnameservers, const string &prefix)
@@ -1232,7 +1232,7 @@ inline vector<DNSName> SyncRes::shuffleInSpeedOrder(NsSet &tnameservers, const s
     if(tns.first.empty()) // this was an authoritative OOB zone, don't pollute the nsSpeeds with that
       return rnameservers;
   }
-  map<DNSName, double> speeds;
+  std::unordered_map<DNSName, double> speeds;
 
   for(const auto& val: rnameservers) {
     double speed;
