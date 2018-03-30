@@ -2779,7 +2779,7 @@ static void checkOrFixFDS()
 
 static void* recursorThread(void*);
 
-static void* pleaseSupplantACLs(std::shared_ptr<NetmaskGroup> ng)
+static void* pleaseSupplantACLs(std::shared_ptr<NetmaskGroup>& ng)
 {
   t_allowFrom = ng;
   return nullptr;

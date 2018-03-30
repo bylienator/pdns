@@ -905,7 +905,7 @@ int main(int argc, char** argv) {
     if(g_verbose) {
       cerr<<"[INFO] Dropping effective user-id to "<<newuid<<endl;
     }
-    if (setuid(pw->pw_uid) < 0) {
+    if (pw != nullptr && setuid(pw->pw_uid) < 0) {
       cerr<<"[ERROR] Could not set user id to "<<newuid<<": "<<stringerror()<<endl;
       had_error = true;
     }
