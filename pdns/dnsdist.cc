@@ -2776,8 +2776,11 @@ try
 
   g_tcpclientthreads = std::make_shared<TCPClientCollection>(g_maxTCPClientThreads, g_useTCPSinglePipe);
 
-  for(auto& t : todo)
-    t();
+  if (todo) {
+    for(auto& t : *todo) {
+      t();
+    }
+  }
 
   localPools = g_pools.getCopy();
   /* create the default pool no matter what */

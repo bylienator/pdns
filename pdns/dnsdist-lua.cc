@@ -54,7 +54,7 @@
 
 using std::thread;
 
-static vector<std::function<void(void)>>* g_launchWork = nullptr;
+static std::unique_ptr<vector<std::function<void(void)>>> g_launchWork{nullptr};
 
 boost::tribool g_noLuaSideEffect;
 static bool g_included{false};
@@ -1769,9 +1769,9 @@ void setupLuaConfig(bool client)
   g_lua.writeFunction("setAllowEmptyResponse", [](bool allow) { g_allowEmptyResponse=allow; });
 }
 
-vector<std::function<void(void)>> setupLua(bool client, const std::string& config)
+std::unique_ptr<std::vector<std::function<void(void)>>> setupLua(bool client, const std::string& config)
 {
-  g_launchWork= new vector<std::function<void(void)>>();
+  g_launchWork= std::unique_ptr<std::vector<std::function<void(void)>>>(new std::vector<std::function<void(void)>>());
 
   setupLuaActions();
   setupLuaConfig(client);
@@ -1789,8 +1789,5 @@ vector<std::function<void(void)>> setupLua(bool client, const std::string& confi
 
   g_lua.executeCode(ifs);
 
-  auto ret = *g_launchWork;
-  delete g_launchWork;
-  g_launchWork = nullptr;
-  return ret;
+  return std::move(g_launchWork);
 }
