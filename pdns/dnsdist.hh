@@ -989,7 +989,7 @@ struct LocalHolders
 struct dnsheader;
 
 void controlThread(int fd, ComboAddress local);
-std::unique_ptr<std::vector<std::function<void(void)>>> setupLua(bool client, const std::string& config);
+std::unique_ptr<std::vector<std::function<void(void)>>> setupLua(bool client, const std::string& config, bool configCheck);
 std::shared_ptr<ServerPool> getPool(const pools_t& pools, const std::string& poolName);
 std::shared_ptr<ServerPool> createPoolIfNotExists(pools_t& pools, const string& poolName);
 NumberedServerVector getDownstreamCandidates(const pools_t& pools, const std::string& poolName);

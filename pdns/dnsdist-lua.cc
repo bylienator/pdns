@@ -1769,9 +1769,9 @@ void setupLuaConfig(bool client)
   g_lua.writeFunction("setAllowEmptyResponse", [](bool allow) { g_allowEmptyResponse=allow; });
 }
 
-std::unique_ptr<std::vector<std::function<void(void)>>> setupLua(bool client, const std::string& config)
+std::unique_ptr<std::vector<std::function<void(void)>>> setupLua(bool client, const std::string& config, bool configCheck)
 {
-  g_launchWork= std::unique_ptr<std::vector<std::function<void(void)>>>(new std::vector<std::function<void(void)>>());
+  g_launchWork = std::unique_ptr<std::vector<std::function<void(void)>>>(new std::vector<std::function<void(void)>>());
 
   setupLuaActions();
   setupLuaConfig(client);
@@ -1782,10 +1782,17 @@ std::unique_ptr<std::vector<std::function<void(void)>>> setupLua(bool client, co
   setupLuaVars();
 
   std::ifstream ifs(config);
-  if(!ifs)
-    warnlog("Unable to read configuration from '%s'", config);
-  else
+  if(!ifs) {
+    if (configCheck) {
+      throw std::runtime_error("Unable to read configuration file from " + config);
+    }
+    else {
+      warnlog("Unable to read configuration from '%s'", config);
+    }
+  }
+  else {
     vinfolog("Read configuration from '%s'", config);
+  }
 
   g_lua.executeCode(ifs);
 
