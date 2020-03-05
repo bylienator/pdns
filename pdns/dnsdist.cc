@@ -197,18 +197,26 @@ std::string DNSQuestion::getTrailingData() const
 
 bool DNSQuestion::setTrailingData(const std::string& tail)
 {
+  cerr<<"in DNSQuestion::setTrailingData with a new tail size of "<<tail.size()<<endl;
   char* message = reinterpret_cast<char*>(this->dh);
   const uint16_t messageLen = getDNSPacketLength(message, this->len);
+  cerr<<"existing message length is "<<std::to_string(messageLen)<<" while the existing packet length is "<<std::to_string(this->len)<<" and buffer size is "<<std::to_string(this->size)<<endl;
   const uint16_t tailLen = tail.size();
+  cerr<<"tailLen is "<<tail.size()<<endl;
   if (tailLen > (this->size - messageLen)) {
+    cerr<<"tailLen is larger than "<<(this->size - messageLen)<<endl;
     return false;
   }
 
   /* Update length and copy data from the Lua string. */
   this->len = messageLen + tailLen;
-  if(tailLen > 0) {
+  cerr<<"new len is "<<std::to_string(this->len)<<endl;
+  if (tailLen > 0) {
+    cerr<<"copying"<<endl;
     tail.copy(message + messageLen, tailLen);
+    cerr<<"copied"<<endl;
   }
+  cerr<<"done"<<endl;
   return true;
 }
 

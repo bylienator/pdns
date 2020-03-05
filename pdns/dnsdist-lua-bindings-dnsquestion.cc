@@ -67,6 +67,7 @@ void setupLuaBindingsDNSQuestion()
       return dq.getTrailingData();
     });
   g_lua.registerFunction<bool(DNSQuestion::*)(std::string)>("setTrailingData", [](DNSQuestion& dq, const std::string& tail) {
+      cerr<<"in Lua DNSQuestion::setTrailingData(), tail is "<<tail.size()<<endl;
       return dq.setTrailingData(tail);
     });
 

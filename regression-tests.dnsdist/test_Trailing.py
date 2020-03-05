@@ -169,8 +169,10 @@ class TestTrailingDataToDnsdist(DNSDistTest):
     addAction(AndRule({QNameRule("dropped.trailing.tests.powerdns.com."), TrailingDataRule()}), DropAction())
 
     function removeTrailingData(dq)
+        print("in removeTrailingData")
         local success = dq:setTrailingData("")
         if not success then
+            print("failed")
             return DNSAction.ServFail, ""
         end
         return DNSAction.None, ""
@@ -265,8 +267,10 @@ class TestTrailingDataToDnsdist(DNSDistTest):
         raw = raw + b'A'* 20
 
         for method in ("sendUDPQuery", "sendTCPQuery"):
+            print('Sending query of size %d (%d) with %s' % (len(raw), len(query.to_wire()), method))
             sender = getattr(self, method)
             (receivedQuery, receivedResponse) = sender(raw, response, rawQuery=True)
+            print(receivedQuery)
             self.assertTrue(receivedQuery)
             self.assertTrue(receivedResponse)
             receivedQuery.id = query.id
