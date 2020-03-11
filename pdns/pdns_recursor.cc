@@ -1145,8 +1145,8 @@ static void startDoResolve(void *p)
     std::vector<pair<uint16_t, string> > ednsOpts;
     bool variableAnswer = dc->d_variable;
     bool haveEDNS=false;
-    bool paddingAllowed = g_paddingFrom.match(dc->d_remote);
-    bool padResponse = paddingAllowed ? (g_paddingMode == PaddingMode::Always) : false;
+    bool paddingAllowed = false;
+    bool padResponse = false;
 #ifdef NOD_ENABLED
     bool hasUDR = false;
 #endif /* NOD_ENABLED */
@@ -1167,6 +1167,13 @@ static void startDoResolve(void *p)
       ednsOpts = edo.d_options;
       maxanswersize -= 11; // EDNS header size
 
+      if (g_paddingFrom.match(dc->d_remote)) {
+        paddingAllowed = true;
+        if (g_paddingMode == PaddingMode::Always) {
+          padResponse = true;
+        }
+      }
+
       for (const auto& o : edo.d_options) {
         if (o.first == EDNSOptionCode::ECS && g_useIncomingECS && !dc->d_ecsParsed) {
           dc->d_ecsFound = getEDNSSubnetOptsFromString(o.second, &dc->d_ednssubnet);
@@ -1180,15 +1187,7 @@ static void startDoResolve(void *p)
             maxanswersize -= 2 + 2 + mode_server_id.size();
           }
         } else if (paddingAllowed && padResponse == false && g_paddingMode == PaddingMode::PaddedQueries && o.first == EDNSOptionCode::PADDING) {
-          /* we should only pad on 'secure' cases to limit amplification:
-             - over TCP ;
-             - from 'known-good' sources (dnsdist for example).
-             We should also support a strict mode (only pad if the query has a padding option)
-             and a relaxed mode (pad if the client supports EDNS).
-             The block-size should be configurable as well.
-          */
           padResponse = true;
-          maxanswersize -= 4;
         }
       }
     }
@@ -1662,10 +1661,14 @@ static void startDoResolve(void *p)
       returnedEdnsOptions.push_back(make_pair(EDNSOptionCode::ECS, makeEDNSSubnetOptsString(eo)));
     }
 
-    if (padResponse) {
+    if (haveEDNS && padResponse) {
       size_t currentSize = pw.getSizeWithOpts(returnedEdnsOptions);
-      if (currentSize < (static_cast<size_t>(maxanswersize) - 4)) {
-        size_t remaining = static_cast<size_t>(maxanswersize) - currentSize;
+      /* we don't use maxawnswersize because it accounts for some EDNS options, but
+         not all of them (for example ECS) */
+      size_t maxSize = min(static_cast<uint16_t>(edo.d_packetsize >= 512 ? edo.d_packetsize : 512), g_udpTruncationThreshold);
+
+      if (currentSize < (maxSize - 4)) {
+        size_t remaining = maxSize - (currentSize + 4);
         /* from rfc8647, "4.1.  Recommended Strategy: Block-Length Padding":
            If a server receives a query that includes the EDNS(0) "Padding"
            option, it MUST pad the corresponding response (see Section 4 of
