@@ -927,6 +927,9 @@ jobs:
 
     docker:
       - image: debian:buster
+        environment:
+          SKIP_IPV6_TESTS: y
+
     steps:
       - add-auth-repo
       - run: apt-get --no-install-recommends install -qq -y pdns-server pdns-backend-bind pdns-tools daemontools authbind jq libfaketime lua-posix lua-socket moreutils bc virtualenv protobuf-compiler
