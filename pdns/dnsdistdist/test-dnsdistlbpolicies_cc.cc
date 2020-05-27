@@ -27,6 +27,9 @@ GlobalStateHolder<NetmaskTree<DynBlock>> g_dynblockNMG;
 GlobalStateHolder<SuffixMatchTree<DynBlock>> g_dynblockSMT;
 #endif /* BENCH_POLICIES */
 
+GlobalStateHolder<pools_t> g_pools;
+std::vector<std::unique_ptr<ClientState>> g_frontends;
+
 /* add stub implementations, we don't want to include the corresponding object files
    and their dependencies */
 
@@ -76,6 +79,12 @@ bool DNSDistSNMPAgent::sendDNSTrap(const DNSQuestion& dq, const std::string& rea
   return false;
 }
 
+void setLuaNoSideEffect()
+{
+}
+
+string g_outputBuffer;
+
 static DNSQuestion getDQ(const DNSName* providedName = nullptr)
 {
   static const DNSName qname("powerdns.com.");
@@ -122,7 +131,7 @@ static void benchPolicy(const ServerPolicy& pol)
   for (size_t idx = 0; idx < 1000; idx++) {
   for (const auto& name : names) {
     auto dq = getDQ(&name);
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
   }
   }
   cerr<<pol.name<<" took "<<std::to_string(sw.udiff())<<" us for "<<names.size()<<endl;
@@ -149,24 +158,24 @@ BOOST_AUTO_TEST_CASE(test_firstAvailable) {
   servers.push_back({ 1, std::make_shared<DownstreamState>(ComboAddress("192.0.2.1:53")) });
 
   /* servers start as 'down' */
-  auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+  auto server = pol.getSelectedBackend(servers, dq);
   BOOST_CHECK(server == nullptr);
 
   /* mark the server as 'up' */
   servers.at(0).second->setUp();
-  server = getSelectedBackendFromPolicy(pol, servers, dq);
+  server = pol.getSelectedBackend(servers, dq);
   BOOST_CHECK(server != nullptr);
 
   /* add a second server, we should still get the first one */
   servers.push_back({ 2, std::make_shared<DownstreamState>(ComboAddress("192.0.2.2:53")) });
-  server = getSelectedBackendFromPolicy(pol, servers, dq);
+  server = pol.getSelectedBackend(servers, dq);
   BOOST_REQUIRE(server != nullptr);
   BOOST_CHECK(server == servers.at(0).second);
 
   /* mark the first server as 'down', second as 'up' */
   servers.at(0).second->setDown();
   servers.at(1).second->setUp();
-  server = getSelectedBackendFromPolicy(pol, servers, dq);
+  server = pol.getSelectedBackend(servers, dq);
   BOOST_REQUIRE(server != nullptr);
   BOOST_CHECK(server == servers.at(1).second);
 
@@ -193,24 +202,24 @@ BOOST_AUTO_TEST_CASE(test_leastOutstanding) {
   servers.push_back({ 1, std::make_shared<DownstreamState>(ComboAddress("192.0.2.1:53")) });
 
   /* servers start as 'down' */
-  auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+  auto server = pol.getSelectedBackend(servers, dq);
   BOOST_CHECK(server == nullptr);
 
   /* mark the server as 'up' */
   servers.at(0).second->setUp();
-  server = getSelectedBackendFromPolicy(pol, servers, dq);
+  server = pol.getSelectedBackend(servers, dq);
   BOOST_CHECK(server != nullptr);
 
   /* add a second server, we should still get the first one */
   servers.push_back({ 2, std::make_shared<DownstreamState>(ComboAddress("192.0.2.2:53")) });
-  server = getSelectedBackendFromPolicy(pol, servers, dq);
+  server = pol.getSelectedBackend(servers, dq);
   BOOST_REQUIRE(server != nullptr);
   BOOST_CHECK(server == servers.at(0).second);
 
   /* mark the first server as 'down', second as 'up' */
   servers.at(0).second->setDown();
   servers.at(1).second->setUp();
-  server = getSelectedBackendFromPolicy(pol, servers, dq);
+  server = pol.getSelectedBackend(servers, dq);
   BOOST_REQUIRE(server != nullptr);
   BOOST_CHECK(server == servers.at(1).second);
 
@@ -218,7 +227,7 @@ BOOST_AUTO_TEST_CASE(test_leastOutstanding) {
   servers.at(0).second->setUp();
   servers.at(0).second->outstanding = 42;
   servers.at(1).second->setUp();
-  server = getSelectedBackendFromPolicy(pol, servers, dq);
+  server = pol.getSelectedBackend(servers, dq);
   BOOST_REQUIRE(server != nullptr);
   BOOST_CHECK(server == servers.at(1).second);
 
@@ -240,7 +249,7 @@ BOOST_AUTO_TEST_CASE(test_wrandom) {
   benchPolicy(pol);
 
   for (size_t idx = 0; idx < 1000; idx++) {
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
     BOOST_REQUIRE(serversMap.count(server) == 1);
     ++serversMap[server];
   }
@@ -268,7 +277,7 @@ BOOST_AUTO_TEST_CASE(test_wrandom) {
   servers.at(servers.size()-1).second->weight = 100;
 
   for (size_t idx = 0; idx < 1000; idx++) {
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
     BOOST_REQUIRE(serversMap.count(server) == 1);
     ++serversMap[server];
   }
@@ -307,7 +316,7 @@ BOOST_AUTO_TEST_CASE(test_whashed) {
 
   for (const auto& name : names) {
     auto dq = getDQ(&name);
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
     BOOST_REQUIRE(serversMap.count(server) == 1);
     ++serversMap[server];
   }
@@ -330,9 +339,9 @@ BOOST_AUTO_TEST_CASE(test_whashed) {
   /* request 1000 times the same name, we should go to the same server every time */
   {
     auto dq = getDQ(&names.at(0));
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
     for (size_t idx = 0; idx < 1000; idx++) {
-      BOOST_CHECK(getSelectedBackendFromPolicy(pol, servers, dq) == server);
+      BOOST_CHECK(pol.getSelectedBackend(servers, dq) == server);
     }
   }
 
@@ -346,7 +355,7 @@ BOOST_AUTO_TEST_CASE(test_whashed) {
 
   for (const auto& name : names) {
     auto dq = getDQ(&name);
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
     BOOST_REQUIRE(serversMap.count(server) == 1);
     ++serversMap[server];
   }
@@ -392,7 +401,7 @@ BOOST_AUTO_TEST_CASE(test_chashed) {
 
   for (const auto& name : names) {
     auto dq = getDQ(&name);
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
     BOOST_REQUIRE(serversMap.count(server) == 1);
     ++serversMap[server];
   }
@@ -415,9 +424,9 @@ BOOST_AUTO_TEST_CASE(test_chashed) {
   /* request 1000 times the same name, we should go to the same server every time */
   {
     auto dq = getDQ(&names.at(0));
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
     for (size_t idx = 0; idx < 1000; idx++) {
-      BOOST_CHECK(getSelectedBackendFromPolicy(pol, servers, dq) == server);
+      BOOST_CHECK(pol.getSelectedBackend(servers, dq) == server);
     }
   }
 
@@ -431,7 +440,7 @@ BOOST_AUTO_TEST_CASE(test_chashed) {
 
   for (const auto& name : names) {
     auto dq = getDQ(&name);
-    auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+    auto server = pol.getSelectedBackend(servers, dq);
     BOOST_REQUIRE(serversMap.count(server) == 1);
     ++serversMap[server];
   }
@@ -487,7 +496,7 @@ BOOST_AUTO_TEST_CASE(test_lua) {
 
     for (const auto& name : names) {
       auto dq = getDQ(&name);
-      auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+      auto server = pol.getSelectedBackend(servers, dq);
       BOOST_REQUIRE(serversMap.count(server) == 1);
       ++serversMap[server];
     }
@@ -547,7 +556,7 @@ BOOST_AUTO_TEST_CASE(test_lua_ffi_rr) {
 
     for (const auto& name : names) {
       auto dq = getDQ(&name);
-      auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+      auto server = pol.getSelectedBackend(servers, dq);
       BOOST_REQUIRE(serversMap.count(server) == 1);
       ++serversMap[server];
     }
@@ -604,7 +613,7 @@ BOOST_AUTO_TEST_CASE(test_lua_ffi_hashed) {
 
     for (const auto& name : names) {
       auto dq = getDQ(&name);
-      auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+      auto server = pol.getSelectedBackend(servers, dq);
       BOOST_REQUIRE(serversMap.count(server) == 1);
       ++serversMap[server];
     }
@@ -659,7 +668,7 @@ BOOST_AUTO_TEST_CASE(test_lua_ffi_whashed) {
 
     for (const auto& name : names) {
       auto dq = getDQ(&name);
-      auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+      auto server = pol.getSelectedBackend(servers, dq);
       BOOST_REQUIRE(serversMap.count(server) == 1);
       ++serversMap[server];
     }
@@ -721,7 +730,7 @@ BOOST_AUTO_TEST_CASE(test_lua_ffi_chashed) {
 
     for (const auto& name : names) {
       auto dq = getDQ(&name);
-      auto server = getSelectedBackendFromPolicy(pol, servers, dq);
+      auto server = pol.getSelectedBackend(servers, dq);
       BOOST_REQUIRE(serversMap.count(server) == 1);
       ++serversMap[server];
     }

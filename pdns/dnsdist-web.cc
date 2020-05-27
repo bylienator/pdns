@@ -372,7 +372,7 @@ static void connectionThread(int sock, ComboAddress remote)
           { "packetcache-misses", 0},
           { "over-capacity-drops", 0 },
           { "too-old-drops", 0 },
-          { "server-policy", g_policy.getLocal()->name}
+          { "server-policy", g_policy.getLocal()->getName()}
         };
 
         for(const auto& e : g_stats.entries) {
@@ -1070,7 +1070,7 @@ static void connectionThread(int sock, ComboAddress remote)
         { "ecs-source-prefix-v6", (double)  g_ECSSourcePrefixV6 },
         { "fixup-case", g_fixupCase },
         { "max-outstanding", (double) g_maxOutstanding },
-        { "server-policy", g_policy.getLocal()->name },
+        { "server-policy", g_policy.getLocal()->getName() },
         { "stale-cache-entries-ttl", (double) g_staleCacheEntriesTTL },
         { "tcp-recv-timeout", (double) g_tcpRecvTimeout },
         { "tcp-send-timeout", (double) g_tcpSendTimeout },

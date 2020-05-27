@@ -1107,7 +1107,7 @@ void setWebserverPassword(const std::string& password);
 void setWebserverCustomHeaders(const boost::optional<std::map<std::string, std::string> > customHeaders);
 
 void dnsdistWebserverThread(int sock, const ComboAddress& local);
-void tcpAcceptorThread(void* p);
+void tcpAcceptorThread(ClientState* p);
 #ifdef HAVE_DNS_OVER_HTTPS
 void dohThread(ClientState* cs);
 #endif /* HAVE_DNS_OVER_HTTPS */
